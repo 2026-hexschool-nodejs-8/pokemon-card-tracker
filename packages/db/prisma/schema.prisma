@@ -1,0 +1,155 @@
+// Prisma schema － 對應 PRD 第十四章資料規格
+// 修改後請執行：npm run db:migrate
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── 列舉 ──
+enum SourceType {
+  api
+  crawler
+}
+
+enum JobTriggerType {
+  manual
+  cron
+}
+
+enum JobStatus {
+  running
+  success
+  partial_success
+  failed
+}
+
+enum LogStatus {
+  success
+  failed
+}
+
+enum AdminRole {
+  admin
+}
+
+// ── 管理者（JWT 登入用）──
+model Admin {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String?
+  role         AdminRole @default(admin)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// ── 卡牌 ──
+model Card {
+  id             String   @id @default(cuid())
+  name           String
+  cardNumber     String
+  setName        String?
+  language       String   @default("ja")
+  condition      String   @default("raw")
+  imageUrl       String?
+  isActive       Boolean  @default(true)
+
+  // 由最新快照同步的摘要欄位
+  latestPrice    Float?
+  latestCurrency String?
+  lastFetchedAt  DateTime?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sources   PriceSource[]
+  snapshots PriceSnapshot[]
+  logs      PriceFetchLog[]
+
+  @@index([name])
+  @@index([cardNumber])
+}
+
+// ── 價格來源 ──
+model PriceSource {
+  id            String     @id @default(cuid())
+  cardId        String
+  type          SourceType
+  provider      String
+  url           String?
+  externalId    String?
+  currency      String     @default("JPY")
+  isActive      Boolean    @default(true)
+  lastSuccessAt DateTime?
+  lastError     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  card      Card            @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  snapshots PriceSnapshot[]
+  logs      PriceFetchLog[]
+
+  @@index([cardId])
+}
+
+// ── 價格快照（歷史）──
+model PriceSnapshot {
+  id           String   @id @default(cuid())
+  cardId       String
+  sourceId     String
+  provider     String
+  price        Float
+  currency     String
+  priceTwd     Float?
+  rawText      String?
+  fetchedAt    DateTime
+  isSuspicious Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  card   Card        @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  source PriceSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([cardId, fetchedAt])
+  @@index([sourceId])
+}
+
+// ── 抓價任務 ──
+model PriceFetchJob {
+  id           String         @id @default(cuid())
+  triggerType  JobTriggerType
+  status       JobStatus      @default(running)
+  startedAt    DateTime       @default(now())
+  finishedAt   DateTime?
+  totalSources Int            @default(0)
+  successCount Int            @default(0)
+  failedCount  Int            @default(0)
+  errorMessage String?
+
+  logs PriceFetchLog[]
+
+  @@index([startedAt])
+}
+
+// ── 抓價明細 log ──
+model PriceFetchLog {
+  id         String    @id @default(cuid())
+  jobId      String
+  cardId     String?
+  sourceId   String?
+  status     LogStatus
+  message    String?
+  durationMs Int?
+  createdAt  DateTime  @default(now())
+
+  job    PriceFetchJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  card   Card?         @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  source PriceSource?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@index([jobId])
+}

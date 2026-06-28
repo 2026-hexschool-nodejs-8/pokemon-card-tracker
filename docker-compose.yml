@@ -1,0 +1,23 @@
+# 一鍵啟動本機 PostgreSQL：docker compose up -d db
+# 帳密需與 .env 的 DATABASE_URL 一致
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: pct-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pct
+      POSTGRES_PASSWORD: pct_password
+      POSTGRES_DB: pokemon_card_tracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - pct_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pct -d pokemon_card_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pct_pgdata:
