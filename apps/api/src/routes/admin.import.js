@@ -11,115 +11,73 @@ router.use(adminAuth);
 
 const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 10000;
 
-router.post(
-  '/tcgplayer',
-  asyncHandler(async (req, res) => {
-    const page = Math.max(1, parseInt(req.body.page, 10) || 1);
-    const limit = Math.min(50, Math.max(1, parseInt(req.body.limit, 10) || 10));
+// ── 共用：將一批 productId 逐一匯入 ──
+async function importProductIds(productIds) {
+  let imported = 0;
+  let skipped = 0;
+  let failed = 0;
+  const results = [];
 
-    const productIds = await getProductIds(page);
-    const targets = productIds.slice(0, limit);
+  for (const productId of productIds) {
+    let card = null;
+    try {
+      const existing = await prisma.priceSource.findFirst({
+        where: { externalId: String(productId), provider: 'tcgplayer' },
+      });
 
-    let imported = 0;
-    let skipped = 0;
-    let failed = 0;
-    const results = [];
+      if (existing) {
+        skipped++;
+        results.push({ productId, status: 'skipped' });
+        continue;
+      }
 
-    for (const productId of targets) {
-      let card = null;
+      let cardData;
       try {
-        const existing = await prisma.priceSource.findFirst({
-          where: { externalId: String(productId), provider: 'tcgplayer' },
-        });
+        cardData = await withTimeout(
+          scrapeCard(productId),
+          FETCH_TIMEOUT_MS,
+          `scrapeCard(${productId})`,
+        );
+      } catch (err) {
+        failed++;
+        results.push({ productId, status: 'failed', error: err.message });
+        continue;
+      }
 
-        if (existing) {
-          skipped++;
-          results.push({ productId, status: 'skipped' });
-          continue;
-        }
-
-        // 只呼叫一次 scrapeCard，取得 name / imageUrl / price
-        let cardData;
-        try {
-          cardData = await withTimeout(
-            scrapeCard(productId),
-            FETCH_TIMEOUT_MS,
-            `scrapeCard(${productId})`,
-          );
-        } catch (err) {
-          failed++;
-          results.push({ productId, status: 'failed', error: err.message });
-          continue;
-        }
-
-        // 建立卡牌，同時取得 source id 以寫入 PriceSnapshot
-        card = await prisma.card.create({
-          data: {
-            name: cardData.name,
-            cardNumber: String(productId),
-            imageUrl: cardData.imageUrl,
-            language: 'en',
-            condition: 'raw',
-            sources: {
-              create: {
-                type: 'crawler',
-                provider: 'tcgplayer',
-                externalId: String(productId),
-                currency: 'USD',
-              },
+      card = await prisma.card.create({
+        data: {
+          name: cardData.name,
+          cardNumber: String(productId),
+          imageUrl: cardData.imageUrl,
+          language: 'en',
+          condition: 'raw',
+          sources: {
+            create: {
+              type: 'crawler',
+              provider: 'tcgplayer',
+              externalId: String(productId),
+              currency: 'USD',
             },
           },
-          include: { sources: true },
-        });
+        },
+        include: { sources: true },
+      });
 
-        const source = card.sources[0];
+      const source = card.sources[0];
 
-        // 把 latestSales 每筆成交各寫一條 PriceSnapshot（真實歷史價格）
-        const sales = cardData.latestSales ?? [];
-        const validSales = sales.flatMap((s) => {
-          try {
-            return [{ price: normalizePrice(s.purchasePrice), orderDate: s.orderDate }];
-          } catch {
-            return [];
-          }
-        });
+      const sales = cardData.latestSales ?? [];
+      const validSales = sales.flatMap((s) => {
+        try {
+          return [{ price: normalizePrice(s.purchasePrice), orderDate: s.orderDate }];
+        } catch {
+          return [];
+        }
+      });
 
-        if (validSales.length > 0) {
-          // 最新一筆作為 latestPrice
-          const latest = validSales[validSales.length - 1];
-          await prisma.$transaction([
-            ...validSales.map(({ price, orderDate }) =>
-              prisma.priceSnapshot.create({
-                data: {
-                  cardId: card.id,
-                  sourceId: source.id,
-                  provider: 'tcgplayer',
-                  price,
-                  currency: 'USD',
-                  rawText: String(price),
-                  fetchedAt: orderDate ? new Date(orderDate) : new Date(),
-                  isSuspicious: false,
-                },
-              }),
-            ),
-            prisma.card.update({
-              where: { id: card.id },
-              data: {
-                latestPrice: latest.price,
-                latestCurrency: 'USD',
-                lastFetchedAt: new Date(),
-                imageUrl: cardData.imageUrl,
-              },
-            }),
-            prisma.priceSource.update({
-              where: { id: source.id },
-              data: { lastSuccessAt: new Date() },
-            }),
-          ]);
-        } else if (cardData.price != null) {
-          // fallback：latestSales 為空時，至少寫入 spotlight price
-          const price = normalizePrice(cardData.price);
-          await prisma.$transaction([
+      if (validSales.length > 0) {
+        const latest = validSales[validSales.length - 1];
+        await prisma.$transaction([
+          ...validSales.map(({ price, orderDate }) =>
             prisma.priceSnapshot.create({
               data: {
                 cardId: card.id,
@@ -128,40 +86,105 @@ router.post(
                 price,
                 currency: 'USD',
                 rawText: String(price),
-                fetchedAt: new Date(),
+                fetchedAt: orderDate ? new Date(orderDate) : new Date(),
                 isSuspicious: false,
               },
             }),
-            prisma.card.update({
-              where: { id: card.id },
-              data: { latestPrice: price, latestCurrency: 'USD', lastFetchedAt: new Date() },
-            }),
-            prisma.priceSource.update({
-              where: { id: source.id },
-              data: { lastSuccessAt: new Date() },
-            }),
-          ]);
-        }
-
-        imported++;
-        results.push({
-          productId,
-          status: 'imported',
-          cardId: card.id,
-          name: cardData.name,
-          price: cardData.price ?? null,
-          salesCount: validSales.length || (cardData.price != null ? 1 : 0),
-        });
-      } catch (err) {
-        if (card) {
-          try { await prisma.card.delete({ where: { id: card.id } }); } catch (_) {}
-        }
-        failed++;
-        results.push({ productId, status: 'failed', error: err.message });
+          ),
+          prisma.card.update({
+            where: { id: card.id },
+            data: {
+              latestPrice: latest.price,
+              latestCurrency: 'USD',
+              lastFetchedAt: new Date(),
+              imageUrl: cardData.imageUrl,
+            },
+          }),
+          prisma.priceSource.update({
+            where: { id: source.id },
+            data: { lastSuccessAt: new Date() },
+          }),
+        ]);
+      } else if (cardData.price != null) {
+        const price = normalizePrice(cardData.price);
+        await prisma.$transaction([
+          prisma.priceSnapshot.create({
+            data: {
+              cardId: card.id,
+              sourceId: source.id,
+              provider: 'tcgplayer',
+              price,
+              currency: 'USD',
+              rawText: String(price),
+              fetchedAt: new Date(),
+              isSuspicious: false,
+            },
+          }),
+          prisma.card.update({
+            where: { id: card.id },
+            data: { latestPrice: price, latestCurrency: 'USD', lastFetchedAt: new Date() },
+          }),
+          prisma.priceSource.update({
+            where: { id: source.id },
+            data: { lastSuccessAt: new Date() },
+          }),
+        ]);
       }
+
+      imported++;
+      results.push({
+        productId,
+        status: 'imported',
+        cardId: card.id,
+        name: cardData.name,
+        price: cardData.price ?? null,
+        salesCount: validSales.length || (cardData.price != null ? 1 : 0),
+      });
+    } catch (err) {
+      if (card) {
+        try { await prisma.card.delete({ where: { id: card.id } }); } catch (_) {}
+      }
+      failed++;
+      results.push({ productId, status: 'failed', error: err.message });
+    }
+  }
+
+  return { imported, skipped, failed, results };
+}
+
+// ── POST /admin/import/tcgplayer ── 批次匯入（依頁碼）
+router.post(
+  '/tcgplayer',
+  asyncHandler(async (req, res) => {
+    const page = Math.max(1, parseInt(req.body.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.body.limit, 10) || 10));
+
+    const productIds = await getProductIds(page);
+    const targets = productIds.slice(0, limit);
+    const summary = await importProductIds(targets);
+    res.json(summary);
+  }),
+);
+
+// ── POST /admin/import/tcgplayer/search ── 依卡名搜尋並匯入
+router.post(
+  '/tcgplayer/search',
+  asyncHandler(async (req, res) => {
+    const { name } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: '請提供卡牌名稱（name）' });
+    }
+    const limit = Math.min(20, Math.max(1, parseInt(req.body.limit, 10) || 5));
+
+    const productIds = await getProductIds(1, name.trim());
+    const targets = productIds.slice(0, limit);
+
+    if (targets.length === 0) {
+      return res.json({ imported: 0, skipped: 0, failed: 0, results: [], message: `找不到「${name}」相關卡牌` });
     }
 
-    res.json({ imported, skipped, failed, results });
+    const summary = await importProductIds(targets);
+    res.json({ ...summary, searchName: name.trim() });
   }),
 );
 

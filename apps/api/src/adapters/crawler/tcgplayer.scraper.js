@@ -41,8 +41,11 @@ export function extractProductIds(obj, result = []) {
   return result;
 }
 
-export async function getProductIds(page = 1) {
-  const searchUrl = `https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&view=grid&ProductTypeName=Cards&page=${page}`;
+export async function getProductIds(page = 1, searchName = '') {
+  const base = 'https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&view=grid&ProductTypeName=Cards';
+  const searchUrl = searchName
+    ? `${base}&q=${encodeURIComponent(searchName)}&page=${page}`
+    : `${base}&page=${page}`;
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     userAgent: BASE_HEADERS['User-Agent'],
