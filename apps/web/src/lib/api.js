@@ -2,7 +2,7 @@
 // dev 模式走 vite proxy（/api → http://localhost:3000）
 import { getToken, clearToken } from './auth.js';
 
-const BASE = '/api';
+const BASE = import.meta.env.VITE_API_URL || '/api';
 
 async function request(path, { method = 'GET', body, auth = false } = {}) {
   const headers = { 'Content-Type': 'application/json' };
