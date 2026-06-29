@@ -58,6 +58,15 @@ export default function CardListPage() {
         {cards.map((c) => (
           <Link key={c.id} to={`/cards/${c.id}`}>
             <Card className="h-full transition-shadow hover:shadow-md">
+              {c.imageUrl ? (
+                <img
+                  src={c.imageUrl}
+                  alt={c.name}
+                  className="h-40 w-full rounded-t-lg object-contain bg-muted"
+                />
+              ) : (
+                <div className="h-40 w-full rounded-t-lg bg-muted" />
+              )}
               <CardHeader>
                 <CardTitle>{c.name}</CardTitle>
                 <p className="text-sm text-muted-foreground">
