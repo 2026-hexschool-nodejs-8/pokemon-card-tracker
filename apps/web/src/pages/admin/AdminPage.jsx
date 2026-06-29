@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isLoggedIn, clearToken } from '@/lib/auth';
-import { adminCreateCard, adminAddSource, adminSyncAll, adminGetJobs } from '@/lib/api';
+import { adminCreateCard, adminAddSource, adminSyncAll, adminGetJobs, adminImportTcgplayer } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,9 @@ export default function AdminPage() {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [importPage, setImportPage] = useState(1);
+  const [importLimit, setImportLimit] = useState(10);
+  const [importResult, setImportResult] = useState(null);
 
   useEffect(() => {
     if (!isLoggedIn()) navigate('/admin/login');
@@ -89,6 +92,23 @@ export default function AdminPage() {
     }
   }
 
+  async function handleImport() {
+    setBusy(true);
+    setError('');
+    setMsg('');
+    setImportResult(null);
+    try {
+      const data = await adminImportTcgplayer(importPage, importLimit);
+      setImportResult(data);
+      setMsg(`匯入完成：成功 ${data.imported}、略過 ${data.skipped}、失敗 ${data.failed}`);
+      loadJobs();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function logout() {
     clearToken();
     navigate('/admin/login');
@@ -135,6 +155,75 @@ export default function AdminPage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>TCGPlayer 爬蟲批次匯入</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            從 TCGPlayer 搜尋頁自動抓取寶可夢卡牌，建立卡牌記錄並立即同步價格與圖片。
+          </p>
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">搜尋頁碼</label>
+              <Input
+                type="number"
+                min={1}
+                className="w-24"
+                value={importPage}
+                onChange={(e) => setImportPage(Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">匯入張數上限（max 50）</label>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                className="w-24"
+                value={importLimit}
+                onChange={(e) => setImportLimit(Number(e.target.value))}
+              />
+            </div>
+            <Button onClick={handleImport} disabled={busy}>
+              {busy ? '匯入中（Playwright 啟動需數秒）…' : '開始匯入'}
+            </Button>
+          </div>
+          {importResult && (
+            <div className="rounded-md border p-3 text-sm space-y-2">
+              <div className="flex gap-4 font-medium">
+                <span className="text-green-600">成功 {importResult.imported}</span>
+                <span className="text-muted-foreground">略過 {importResult.skipped}</span>
+                <span className="text-destructive">失敗 {importResult.failed}</span>
+              </div>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b text-muted-foreground text-left">
+                    <th className="py-1">productId</th>
+                    <th>卡名</th>
+                    <th>狀態</th>
+                    <th>錯誤</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importResult.results.map((r) => (
+                    <tr key={r.productId} className="border-b">
+                      <td className="py-1">{r.productId}</td>
+                      <td>{r.name || '—'}</td>
+                      <td className={
+                        r.status === 'imported' ? 'text-green-600' :
+                        r.status === 'skipped' ? 'text-muted-foreground' : 'text-destructive'
+                      }>{r.status}</td>
+                      <td className="text-destructive">{r.error || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
 

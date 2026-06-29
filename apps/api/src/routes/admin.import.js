@@ -3,8 +3,8 @@ import { prisma } from '@pct/db';
 import { adminAuth } from '../middleware/adminAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getProductIds, scrapeCard } from '../adapters/crawler/tcgplayer.scraper.js';
-import { runPriceSync } from '../services/priceSync.service.js';
 import { withTimeout } from '../lib/timeout.js';
+import { normalizePrice } from '../lib/normalizePrice.js';
 
 const router = Router();
 router.use(adminAuth);
@@ -26,7 +26,6 @@ router.post(
     const results = [];
 
     for (const productId of targets) {
-      // card 宣告在外層，讓 catch 區塊可以判斷是否需要刪除孤兒記錄
       let card = null;
       try {
         const existing = await prisma.priceSource.findFirst({
@@ -39,8 +38,7 @@ router.post(
           continue;
         }
 
-        // Bug 3 / Bug 6：加 withTimeout 防止 worker 掛住；
-        // scrapeCard 失敗直接 continue，不建 Card（避免 name 為空的孤兒記錄）
+        // 只呼叫一次 scrapeCard，取得 name / imageUrl / price
         let cardData;
         try {
           cardData = await withTimeout(
@@ -54,6 +52,7 @@ router.post(
           continue;
         }
 
+        // 建立卡牌，同時取得 source id 以寫入 PriceSnapshot
         card = await prisma.card.create({
           data: {
             name: cardData.name,
@@ -70,15 +69,52 @@ router.post(
               },
             },
           },
+          include: { sources: true },
         });
 
-        await runPriceSync({ triggerType: 'manual', cardId: card.id });
+        const source = card.sources[0];
+
+        // 直接用第一次 scrapeCard 拿到的 price 寫入 PriceSnapshot，
+        // 避免第二次爬蟲因 rate limit 或 Cookie 失效而靜默失敗。
+        if (cardData.price != null) {
+          const price = normalizePrice(cardData.price);
+          await prisma.$transaction([
+            prisma.priceSnapshot.create({
+              data: {
+                cardId: card.id,
+                sourceId: source.id,
+                provider: 'tcgplayer',
+                price,
+                currency: 'USD',
+                rawText: String(cardData.price),
+                fetchedAt: new Date(),
+                isSuspicious: false,
+              },
+            }),
+            prisma.card.update({
+              where: { id: card.id },
+              data: {
+                latestPrice: price,
+                latestCurrency: 'USD',
+                lastFetchedAt: new Date(),
+              },
+            }),
+            prisma.priceSource.update({
+              where: { id: source.id },
+              data: { lastSuccessAt: new Date() },
+            }),
+          ]);
+        }
 
         imported++;
-        results.push({ productId, status: 'imported', cardId: card.id, name: cardData.name });
+        results.push({
+          productId,
+          status: 'imported',
+          cardId: card.id,
+          name: cardData.name,
+          price: cardData.price ?? null,
+        });
       } catch (err) {
-        // Bug 4：runPriceSync 失敗時刪除剛建的 Card，
-        // 避免孤兒記錄讓下次匯入因 findFirst 找到 PriceSource 而永遠 skip
         if (card) {
           try { await prisma.card.delete({ where: { id: card.id } }); } catch (_) {}
         }
