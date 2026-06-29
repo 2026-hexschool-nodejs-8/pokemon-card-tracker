@@ -74,9 +74,50 @@ router.post(
 
         const source = card.sources[0];
 
-        // 直接用第一次 scrapeCard 拿到的 price 寫入 PriceSnapshot，
-        // 避免第二次爬蟲因 rate limit 或 Cookie 失效而靜默失敗。
-        if (cardData.price != null) {
+        // 把 latestSales 每筆成交各寫一條 PriceSnapshot（真實歷史價格）
+        const sales = cardData.latestSales ?? [];
+        const validSales = sales.flatMap((s) => {
+          try {
+            return [{ price: normalizePrice(s.purchasePrice), orderDate: s.orderDate }];
+          } catch {
+            return [];
+          }
+        });
+
+        if (validSales.length > 0) {
+          // 最新一筆作為 latestPrice
+          const latest = validSales[validSales.length - 1];
+          await prisma.$transaction([
+            ...validSales.map(({ price, orderDate }) =>
+              prisma.priceSnapshot.create({
+                data: {
+                  cardId: card.id,
+                  sourceId: source.id,
+                  provider: 'tcgplayer',
+                  price,
+                  currency: 'USD',
+                  rawText: String(price),
+                  fetchedAt: orderDate ? new Date(orderDate) : new Date(),
+                  isSuspicious: false,
+                },
+              }),
+            ),
+            prisma.card.update({
+              where: { id: card.id },
+              data: {
+                latestPrice: latest.price,
+                latestCurrency: 'USD',
+                lastFetchedAt: new Date(),
+                imageUrl: cardData.imageUrl,
+              },
+            }),
+            prisma.priceSource.update({
+              where: { id: source.id },
+              data: { lastSuccessAt: new Date() },
+            }),
+          ]);
+        } else if (cardData.price != null) {
+          // fallback：latestSales 為空時，至少寫入 spotlight price
           const price = normalizePrice(cardData.price);
           await prisma.$transaction([
             prisma.priceSnapshot.create({
@@ -86,18 +127,14 @@ router.post(
                 provider: 'tcgplayer',
                 price,
                 currency: 'USD',
-                rawText: String(cardData.price),
+                rawText: String(price),
                 fetchedAt: new Date(),
                 isSuspicious: false,
               },
             }),
             prisma.card.update({
               where: { id: card.id },
-              data: {
-                latestPrice: price,
-                latestCurrency: 'USD',
-                lastFetchedAt: new Date(),
-              },
+              data: { latestPrice: price, latestCurrency: 'USD', lastFetchedAt: new Date() },
             }),
             prisma.priceSource.update({
               where: { id: source.id },
@@ -113,6 +150,7 @@ router.post(
           cardId: card.id,
           name: cardData.name,
           price: cardData.price ?? null,
+          salesCount: validSales.length || (cardData.price != null ? 1 : 0),
         });
       } catch (err) {
         if (card) {

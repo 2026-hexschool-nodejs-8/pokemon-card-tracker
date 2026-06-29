@@ -104,10 +104,20 @@ export async function scrapeCard(productId) {
   const name = salesData[0]?.title || `Product ${productId}`;
   const price = spotlightData.price ?? salesData[0]?.purchasePrice ?? null;
 
+  const latestSales = salesData
+    .filter((s) => s.purchasePrice > 0)
+    .map((s) => ({
+      purchasePrice: s.purchasePrice,
+      orderDate: s.orderDate,
+      condition: s.condition,
+      language: s.language,
+    }));
+
   return {
     productId,
     name,
     imageUrl: `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_in_1000x1000.jpg`,
     price,
+    latestSales,
   };
 }

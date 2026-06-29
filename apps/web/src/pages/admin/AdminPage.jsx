@@ -204,6 +204,7 @@ export default function AdminPage() {
                   <tr className="border-b text-muted-foreground text-left">
                     <th className="py-1">productId</th>
                     <th>卡名</th>
+                    <th>歷史價格筆數</th>
                     <th>狀態</th>
                     <th>錯誤</th>
                   </tr>
@@ -213,6 +214,7 @@ export default function AdminPage() {
                     <tr key={r.productId} className="border-b">
                       <td className="py-1">{r.productId}</td>
                       <td>{r.name || '—'}</td>
+                      <td>{r.salesCount != null ? `${r.salesCount} 筆` : '—'}</td>
                       <td className={
                         r.status === 'imported' ? 'text-green-600' :
                         r.status === 'skipped' ? 'text-muted-foreground' : 'text-destructive'
