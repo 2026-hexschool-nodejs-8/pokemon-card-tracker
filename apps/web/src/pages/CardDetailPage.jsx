@@ -47,19 +47,34 @@ export default function CardDetailPage() {
       </Link>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">{card.name}</CardTitle>
-          <p className="text-muted-foreground">
-            {card.cardNumber}　{card.setName}　{card.language} / {card.condition}
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-1">
-          <p className="text-3xl font-bold">
-            {card.latestPrice == null
-              ? '尚未更新價格'
-              : `${card.latestCurrency} ${card.latestPrice.toLocaleString()}`}
-          </p>
-          <p className="text-sm text-muted-foreground">最後更新：{fmtTime(card.lastFetchedAt)}</p>
+        <CardContent className="pt-6">
+          <div className="flex flex-col gap-6 md:flex-row">
+            <div className="flex-shrink-0">
+              {card.imageUrl ? (
+                <img
+                  src={card.imageUrl}
+                  alt={card.name}
+                  className="max-w-xs w-full rounded-lg object-contain"
+                />
+              ) : (
+                <div className="max-w-xs w-full h-80 rounded-lg bg-muted" />
+              )}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <h2 className="text-2xl font-bold">{card.name}</h2>
+                <p className="text-muted-foreground">
+                  {card.cardNumber}　{card.setName}　{card.language} / {card.condition}
+                </p>
+              </div>
+              <p className="text-3xl font-bold">
+                {card.latestPrice == null
+                  ? '尚未更新價格'
+                  : `${card.latestCurrency} ${card.latestPrice.toLocaleString()}`}
+              </p>
+              <p className="text-sm text-muted-foreground">最後更新：{fmtTime(card.lastFetchedAt)}</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -104,7 +119,7 @@ export default function CardDetailPage() {
                   <td className="py-2">{fmtTime(p.fetchedAt)}</td>
                   <td>{p.provider}</td>
                   <td>
-                    {p.currency} {p.price.toLocaleString()}
+                    {p.currency} {p.price?.toLocaleString() ?? '—'}
                     {p.isSuspicious && <span className="ml-1 text-destructive">⚠</span>}
                   </td>
                   <td className="text-muted-foreground">{p.rawText}</td>

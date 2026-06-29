@@ -6,6 +6,7 @@ import cardsRouter from './routes/cards.js';
 import authRouter from './routes/auth.js';
 import adminCardsRouter from './routes/admin.cards.js';
 import adminJobsRouter from './routes/admin.jobs.js';
+import adminImportRouter from './routes/admin.import.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 export function createApp() {
@@ -25,6 +26,7 @@ export function createApp() {
   app.use('/admin/auth', authRouter);
   app.use('/admin', adminCardsRouter);
   app.use('/admin', adminJobsRouter);
+  app.use('/admin/import', adminImportRouter);
 
   // 收尾
   app.use(notFoundHandler);

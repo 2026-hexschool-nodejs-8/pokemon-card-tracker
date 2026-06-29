@@ -107,7 +107,12 @@ async function processOneSource(jobId, source) {
     }),
     prisma.card.update({
       where: { id: source.cardId },
-      data: { latestPrice: price, latestCurrency: currency, lastFetchedAt: new Date() },
+      data: {
+        latestPrice: price,
+        latestCurrency: currency,
+        lastFetchedAt: new Date(),
+        ...(result.imageUrl ? { imageUrl: result.imageUrl } : {}),
+      },
     }),
     prisma.priceSource.update({
       where: { id: source.id },
