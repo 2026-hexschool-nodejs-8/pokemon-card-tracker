@@ -4,9 +4,12 @@ import { adminAuth } from '../middleware/adminAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getProductIds, scrapeCard } from '../adapters/crawler/tcgplayer.scraper.js';
 import { runPriceSync } from '../services/priceSync.service.js';
+import { withTimeout } from '../lib/timeout.js';
 
 const router = Router();
 router.use(adminAuth);
+
+const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 10000;
 
 router.post(
   '/tcgplayer',
@@ -23,6 +26,8 @@ router.post(
     const results = [];
 
     for (const productId of targets) {
+      // card 宣告在外層，讓 catch 區塊可以判斷是否需要刪除孤兒記錄
+      let card = null;
       try {
         const existing = await prisma.priceSource.findFirst({
           where: { externalId: String(productId), provider: 'tcgplayer' },
@@ -34,9 +39,22 @@ router.post(
           continue;
         }
 
-        const cardData = await scrapeCard(productId);
+        // Bug 3 / Bug 6：加 withTimeout 防止 worker 掛住；
+        // scrapeCard 失敗直接 continue，不建 Card（避免 name 為空的孤兒記錄）
+        let cardData;
+        try {
+          cardData = await withTimeout(
+            scrapeCard(productId),
+            FETCH_TIMEOUT_MS,
+            `scrapeCard(${productId})`,
+          );
+        } catch (err) {
+          failed++;
+          results.push({ productId, status: 'failed', error: err.message });
+          continue;
+        }
 
-        const card = await prisma.card.create({
+        card = await prisma.card.create({
           data: {
             name: cardData.name,
             cardNumber: String(productId),
@@ -59,6 +77,11 @@ router.post(
         imported++;
         results.push({ productId, status: 'imported', cardId: card.id, name: cardData.name });
       } catch (err) {
+        // Bug 4：runPriceSync 失敗時刪除剛建的 Card，
+        // 避免孤兒記錄讓下次匯入因 findFirst 找到 PriceSource 而永遠 skip
+        if (card) {
+          try { await prisma.card.delete({ where: { id: card.id } }); } catch (_) {}
+        }
         failed++;
         results.push({ productId, status: 'failed', error: err.message });
       }

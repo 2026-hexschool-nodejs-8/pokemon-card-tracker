@@ -119,7 +119,7 @@ export default function CardDetailPage() {
                   <td className="py-2">{fmtTime(p.fetchedAt)}</td>
                   <td>{p.provider}</td>
                   <td>
-                    {p.currency} {p.price.toLocaleString()}
+                    {p.currency} {p.price?.toLocaleString() ?? '—'}
                     {p.isSuspicious && <span className="ml-1 text-destructive">⚠</span>}
                   </td>
                   <td className="text-muted-foreground">{p.rawText}</td>

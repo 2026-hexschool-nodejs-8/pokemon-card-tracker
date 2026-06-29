@@ -5,9 +5,9 @@ export const tcgplayerCrawlerAdapter = {
   type: 'crawler',
   name: 'tcgplayer',
   async fetchPrice(source) {
-    const productId = parseInt(source.externalId, 10);
-    if (!productId || productId <= 0) {
-      throw new Error(`tcgplayer adapter: externalId 必須是正整數，收到 "${source.externalId}"`);
+    const productId = Number(source.externalId);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      throw new Error(`tcgplayer crawler adapter 需要正整數 externalId，收到: ${source.externalId}`);
     }
 
     const card = await scrapeCard(productId);

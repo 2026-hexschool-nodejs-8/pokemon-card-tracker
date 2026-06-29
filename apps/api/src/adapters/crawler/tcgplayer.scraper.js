@@ -27,7 +27,7 @@ export function extractProductIds(obj, result = []) {
     obj.forEach((item) => extractProductIds(item, result));
     return result;
   }
-  const idFields = ['productId', 'ProductId', 'product_id', 'id'];
+  const idFields = ['productId', 'ProductId', 'product_id'];
   for (const field of idFields) {
     if (typeof obj[field] === 'number' && obj[field] > 0) {
       result.push(obj[field]);
@@ -52,20 +52,23 @@ export async function getProductIds(page = 1) {
   const productIds = [];
   const pendingHandlers = [];
 
-  tab.on('response', (response) => {
-    const url = response.url();
-    const contentType = response.headers()['content-type'] || '';
-    if (!contentType.includes('application/json')) return;
-    if (!url.includes('tcgplayer.com') && !url.includes('tcgapi')) return;
-    pendingHandlers.push(
-      response.json().then((body) => extractProductIds(body, productIds)).catch(() => {}),
-    );
-  });
+  try {
+    tab.on('response', (response) => {
+      const url = response.url();
+      const contentType = response.headers()['content-type'] || '';
+      if (!contentType.includes('application/json')) return;
+      if (!url.includes('tcgplayer.com') && !url.includes('tcgapi')) return;
+      pendingHandlers.push(
+        response.json().then((body) => extractProductIds(body, productIds)).catch(() => {}),
+      );
+    });
 
-  await tab.goto(searchUrl, { waitUntil: 'networkidle', timeout: 30000 });
-  await tab.waitForTimeout(3000);
-  await Promise.allSettled(pendingHandlers);
-  await browser.close();
+    await tab.goto(searchUrl, { waitUntil: 'networkidle', timeout: 30000 });
+    await tab.waitForTimeout(3000);
+    await Promise.allSettled(pendingHandlers);
+  } finally {
+    await browser.close();
+  }
 
   if (productIds.length === 0) {
     throw new Error('無法從搜尋頁取得 productId，請確認頁面是否正常載入或設定 TCGPLAYER_COOKIE');
