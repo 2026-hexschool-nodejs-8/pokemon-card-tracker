@@ -2,8 +2,9 @@
 // 新增來源時：寫一個 adapter，在這裡註冊即可，service / scheduler 不必改
 import { mockApiAdapter } from './api/mockApi.adapter.js';
 import { mockCrawlerAdapter } from './crawler/mockCrawler.adapter.js';
+import { tcgplayerCrawlerAdapter } from './crawler/tcgplayerCrawler.adapter.js';
 
-const adapters = [mockApiAdapter, mockCrawlerAdapter];
+const adapters = [mockApiAdapter, mockCrawlerAdapter, tcgplayerCrawlerAdapter];
 
 // 以 provider 名稱為 key
 const byProvider = new Map(adapters.map((a) => [a.name, a]));
