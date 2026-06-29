@@ -55,35 +55,49 @@ export default function CardListPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {cards.map((c) => (
-          <Link key={c.id} to={`/cards/${c.id}`}>
-            <Card className="h-full transition-shadow hover:shadow-md">
-              {c.imageUrl ? (
-                <img
-                  src={c.imageUrl}
-                  alt={c.name}
-                  className="h-40 w-full rounded-t-lg object-contain bg-muted"
-                />
-              ) : (
-                <div className="h-40 w-full rounded-t-lg bg-muted" />
-              )}
-              <CardHeader>
-                <CardTitle>{c.name}</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {c.cardNumber}　{c.setName}
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-1 text-sm">
-                <p>
-                  <span className="text-muted-foreground">語言 / 品相：</span>
-                  {c.language} / {c.condition}
-                </p>
-                <p className="text-lg font-semibold">{fmtPrice(c.latestPrice, c.latestCurrency)}</p>
-                <p className="text-xs text-muted-foreground">更新：{fmtTime(c.lastFetchedAt)}</p>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+        {cards.map((c) => {
+          const tcgplayerId = /^\d+$/.test(c.cardNumber) ? c.cardNumber : null;
+          return (
+            <Link key={c.id} to={`/cards/${c.id}`}>
+              <Card className="h-full transition-shadow hover:shadow-md">
+                {c.imageUrl ? (
+                  <img
+                    src={c.imageUrl}
+                    alt={c.name}
+                    className="h-40 w-full rounded-t-lg object-contain bg-muted"
+                  />
+                ) : (
+                  <div className="h-40 w-full rounded-t-lg bg-muted" />
+                )}
+                <CardHeader>
+                  <CardTitle>{c.name}</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {c.cardNumber}　{c.setName}
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-1 text-sm">
+                  <p>
+                    <span className="text-muted-foreground">語言 / 品相：</span>
+                    {c.language} / {c.condition}
+                  </p>
+                  <p className="text-lg font-semibold">{fmtPrice(c.latestPrice, c.latestCurrency)}</p>
+                  <p className="text-xs text-muted-foreground">更新：{fmtTime(c.lastFetchedAt)}</p>
+                  {tcgplayerId && (
+                    <a
+                      href={`https://www.tcgplayer.com/product/${tcgplayerId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-block mt-1 text-xs text-blue-600 hover:underline"
+                    >
+                      在 TCGPlayer 查看 ↗
+                    </a>
+                  )}
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

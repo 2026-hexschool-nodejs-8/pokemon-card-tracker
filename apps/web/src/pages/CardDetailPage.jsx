@@ -73,6 +73,20 @@ export default function CardDetailPage() {
                   : `${card.latestCurrency} ${card.latestPrice.toLocaleString()}`}
               </p>
               <p className="text-sm text-muted-foreground">最後更新：{fmtTime(card.lastFetchedAt)}</p>
+              {(() => {
+                const tcgSrc = card.sources?.find((s) => s.provider === 'tcgplayer');
+                const pid = tcgSrc?.externalId ?? (/^\d+$/.test(card.cardNumber) ? card.cardNumber : null);
+                return pid ? (
+                  <a
+                    href={`https://www.tcgplayer.com/product/${pid}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block text-sm text-blue-600 hover:underline"
+                  >
+                    在 TCGPlayer 查看完整資訊 ↗
+                  </a>
+                ) : null;
+              })()}
             </div>
           </div>
         </CardContent>
