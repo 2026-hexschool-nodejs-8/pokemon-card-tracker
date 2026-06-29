@@ -50,22 +50,21 @@ export async function getProductIds(page = 1) {
   });
   const tab = await context.newPage();
   const productIds = [];
+  const pendingHandlers = [];
 
-  tab.on('response', async (response) => {
+  tab.on('response', (response) => {
     const url = response.url();
     const contentType = response.headers()['content-type'] || '';
     if (!contentType.includes('application/json')) return;
     if (!url.includes('tcgplayer.com') && !url.includes('tcgapi')) return;
-    try {
-      const body = await response.json();
-      extractProductIds(body, productIds);
-    } catch {
-      // 忽略解析失敗
-    }
+    pendingHandlers.push(
+      response.json().then((body) => extractProductIds(body, productIds)).catch(() => {}),
+    );
   });
 
   await tab.goto(searchUrl, { waitUntil: 'networkidle', timeout: 30000 });
   await tab.waitForTimeout(3000);
+  await Promise.allSettled(pendingHandlers);
   await browser.close();
 
   if (productIds.length === 0) {
@@ -78,7 +77,7 @@ export async function getProductIds(page = 1) {
 export async function scrapeCard(productId) {
   const headers = getHeaders();
 
-  const [latestSalesRes, spotlightRes] = await Promise.all([
+  const [latestSalesResult, spotlightResult] = await Promise.allSettled([
     axios.post(
       `https://mpapi.tcgplayer.com/v2/product/${productId}/latestsales?mpfev=5293`,
       { conditions: [], languages: [1], variants: [], listingType: 'All', limit: 25 },
@@ -91,8 +90,14 @@ export async function scrapeCard(productId) {
     ),
   ]);
 
-  const salesData = latestSalesRes.data?.data || [];
-  const spotlightData = spotlightRes.data?.spotlight || {};
+  if (latestSalesResult.status === 'rejected') {
+    throw new Error(`無法取得 productId ${productId} 的銷售資料：${latestSalesResult.reason?.message}`);
+  }
+
+  const salesData = latestSalesResult.value.data?.data || [];
+  const spotlightData =
+    spotlightResult.status === 'fulfilled' ? (spotlightResult.value.data?.spotlight || {}) : {};
+
   const name = salesData[0]?.title || `Product ${productId}`;
   const price = spotlightData.price ?? salesData[0]?.purchasePrice ?? null;
 
