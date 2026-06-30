@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -51,5 +53,59 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-color: #F8F9FF;
+    font-family: 'Noto Sans TC', sans-serif;
   }
+}
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.card-appear {
+  opacity: 0;
+  animation: fadeSlideUp 0.4s ease forwards;
+}
+
+.card-grid {
+  columns: 3;
+  column-gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+  .card-grid { columns: 2; }
+}
+
+@media (max-width: 540px) {
+  .card-grid { columns: 1; }
+}
+
+.pokeball-deco {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, white 50%, #1A1A2E 50%);
+  border: 3px solid rgba(255, 255, 255, 0.7);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.pokeball-deco::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 2px solid #CC0000;
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isLoggedIn, clearToken } from '@/lib/auth';
-import { adminCreateCard, adminAddSource, adminSyncAll, adminGetJobs, adminImportTcgplayer, adminSearchImportTcgplayer } from '@/lib/api';
+import { adminCreateCard, adminAddSource, adminSyncAll, adminGetJobs, adminImportTcgplayer, adminSearchImportTcgplayer, adminClearStuckJobs } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -87,6 +87,21 @@ export default function AdminPage() {
     try {
       const { data: job } = await adminSyncAll();
       setMsg(`抓價完成：${job.status}（成功 ${job.successCount} / 失敗 ${job.failedCount}）`);
+      loadJobs();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleClearStuck() {
+    setBusy(true);
+    setError('');
+    setMsg('');
+    try {
+      const { data } = await adminClearStuckJobs();
+      setMsg(`已清除 ${data.clearedCount} 個卡住的任務`);
       loadJobs();
     } catch (err) {
       setError(err.message);
@@ -325,9 +340,12 @@ export default function AdminPage() {
         <CardHeader>
           <CardTitle>手動更新</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-3">
           <Button onClick={handleSyncAll} disabled={busy}>
             {busy ? '更新中…' : '立即抓取全部卡牌價格'}
+          </Button>
+          <Button variant="outline" onClick={handleClearStuck} disabled={busy}>
+            清除卡住的任務
           </Button>
         </CardContent>
       </Card>

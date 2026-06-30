@@ -61,3 +61,9 @@ export const adminImportTcgplayer = (page, limit) =>
 
 export const adminSearchImportTcgplayer = (name, limit) =>
   request('/admin/import/tcgplayer/search', { method: 'POST', body: { name, limit }, auth: true });
+
+export const adminClearStuckJobs = () =>
+  request('/admin/jobs/clear-stuck', { method: 'POST', auth: true });
+
+export const getPriceHistory = (id, range = 'quarter') =>
+  request(`/cards/${id}/tcgplayer-history?range=${range}`);

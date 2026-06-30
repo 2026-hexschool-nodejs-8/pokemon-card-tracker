@@ -6,17 +6,22 @@ import AdminPage from './pages/admin/AdminPage.jsx';
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="container flex h-14 items-center justify-between">
-          <Link to="/" className="font-bold">
-            🃏 寶可夢卡牌價格追蹤器
+    <div className="min-h-screen" style={{ background: '#F8F9FF' }}>
+      <header style={{ background: '#CC0000' }} className="shadow-md">
+        <div className="container flex h-16 items-center justify-between gap-4">
+          <Link
+            to="/"
+            className="font-extrabold text-white text-lg tracking-wide"
+            style={{ fontFamily: 'Nunito, sans-serif' }}
+          >
+            🃏 寶可夢卡牌追蹤器
           </Link>
-          <nav className="flex gap-4 text-sm">
-            <Link to="/" className="hover:underline">
+          <div className="pokeball-deco" />
+          <nav className="flex gap-6 text-sm font-semibold text-white" style={{ fontFamily: 'Nunito, sans-serif' }}>
+            <Link to="/" className="hover:opacity-75 transition-opacity">
               卡牌列表
             </Link>
-            <Link to="/admin" className="hover:underline">
+            <Link to="/admin" className="hover:opacity-75 transition-opacity">
               後台管理
             </Link>
           </nav>
