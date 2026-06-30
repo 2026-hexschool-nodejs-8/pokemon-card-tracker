@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { prisma } from '@pct/db';
 import { notFound } from '../lib/httpError.js';
 
@@ -28,6 +29,28 @@ export async function getCardById(id) {
   });
   if (!card) throw notFound('找不到這張卡牌');
   return card;
+}
+
+const INFINITE_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+  'Origin': 'https://www.tcgplayer.com',
+  'Referer': 'https://www.tcgplayer.com/',
+};
+
+export async function getTcgplayerPriceHistory(id, range = 'quarter') {
+  const card = await getCardById(id);
+  const src = card.sources?.find((s) => s.provider === 'tcgplayer');
+  if (!src?.externalId) return null;
+
+  const { data } = await axios.get(
+    `https://infinite-api.tcgplayer.com/price/history/${src.externalId}/detailed?range=${range}`,
+    { headers: INFINITE_HEADERS },
+  );
+
+  const nm = data.result?.find(
+    (r) => r.condition === 'Near Mint' && r.variant === 'Normal' && r.language === 'English',
+  );
+  return nm ?? data.result?.[0] ?? null;
 }
 
 // 歷史價格：可用 from / to / source 篩選
