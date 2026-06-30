@@ -50,7 +50,7 @@ cp apps/web/.env.example apps/web/.env
 1. 瀏覽器開啟 [tcgplayer.com](https://www.tcgplayer.com)
 2. 開 DevTools → Network → 任意請求 → Headers → 複製 `Cookie` 欄位值
 3. 貼入 `.env`
-4. TCGPLAYER_COOKIE=你的Cookie
+4. TCGPLAYER_COOKIE=你複製的Cookie
 
 > Cookie 過期會收到 403，需重新複製。
 
