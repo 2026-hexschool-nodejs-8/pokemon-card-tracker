@@ -46,34 +46,44 @@ export async function runPriceSync({ triggerType, cardId } = {}) {
   let failedCount = 0;
   const errors = [];
 
-  for (const source of sources) {
-    const startedAt = Date.now();
-    try {
-      await processOneSource(job.id, source);
-      successCount += 1;
-    } catch (err) {
-      failedCount += 1;
-      errors.push(`${source.provider}: ${err.message}`);
-      await handleSourceFailure(job.id, source, err, Date.now() - startedAt);
-      logger.warn(`來源 ${source.provider}(${source.id}) 失敗：${err.message}`);
+  try {
+    for (const source of sources) {
+      const startedAt = Date.now();
+      try {
+        await processOneSource(job.id, source);
+        successCount += 1;
+      } catch (err) {
+        failedCount += 1;
+        errors.push(`${source.provider}: ${err.message}`);
+        await handleSourceFailure(job.id, source, err, Date.now() - startedAt);
+        logger.warn(`來源 ${source.provider}(${source.id}) 失敗：${err.message}`);
+      }
     }
+
+    const status = resolveJobStatus(sources.length, successCount, failedCount);
+    const finished = await prisma.priceFetchJob.update({
+      where: { id: job.id },
+      data: {
+        status,
+        finishedAt: new Date(),
+        successCount,
+        failedCount,
+        errorMessage: errors.length ? errors.join('; ').slice(0, 1000) : null,
+      },
+      include: { logs: true },
+    });
+
+    logger.info(`Job ${job.id} 結束：${status}（成功 ${successCount} / 失敗 ${failedCount}）`);
+    return finished;
+  } catch (err) {
+    // 未預期錯誤（如 DB 連線中斷）：確保 job 被結算為 FAILED，不會永久卡在 RUNNING
+    logger.error(`Job ${job.id} 發生未預期錯誤：${err.message}`);
+    await prisma.priceFetchJob.update({
+      where: { id: job.id },
+      data: { status: JOB_STATUS.FAILED, finishedAt: new Date(), errorMessage: err.message.slice(0, 1000) },
+    }).catch(() => {});
+    throw err;
   }
-
-  const status = resolveJobStatus(sources.length, successCount, failedCount);
-  const finished = await prisma.priceFetchJob.update({
-    where: { id: job.id },
-    data: {
-      status,
-      finishedAt: new Date(),
-      successCount,
-      failedCount,
-      errorMessage: errors.length ? errors.join('; ').slice(0, 1000) : null,
-    },
-    include: { logs: true },
-  });
-
-  logger.info(`Job ${job.id} 結束：${status}（成功 ${successCount} / 失敗 ${failedCount}）`);
-  return finished;
 }
 
 // ── 單一來源：抓價 → 清洗 → 寫快照 → 更新卡牌 → 寫成功 log ──
@@ -91,6 +101,18 @@ async function processOneSource(jobId, source) {
   const price = normalizePrice(result.rawText ?? result.price);
   const currency = result.currency || source.currency;
   const isSuspicious = isSuspiciousPrice(price, source.card.latestPrice);
+  const fetchedAt = new Date(result.fetchedAt || Date.now());
+
+  // 去重：若最新一筆 snapshot 的 fetchedAt >= 本次資料時間，代表沒有新成交，跳過寫入
+  const latestSnapshot = await prisma.priceSnapshot.findFirst({
+    where: { sourceId: source.id },
+    orderBy: { fetchedAt: 'desc' },
+    select: { fetchedAt: true },
+  });
+  if (latestSnapshot && latestSnapshot.fetchedAt >= fetchedAt) {
+    logger.info(`來源 ${source.provider}(${source.id}) 無新資料（最新成交 ${fetchedAt.toISOString()} 已存在），略過`);
+    return;
+  }
 
   await prisma.$transaction([
     prisma.priceSnapshot.create({
@@ -101,7 +123,7 @@ async function processOneSource(jobId, source) {
         price,
         currency,
         rawText: result.rawText ?? String(result.price),
-        fetchedAt: new Date(result.fetchedAt || Date.now()),
+        fetchedAt,
         isSuspicious,
       },
     }),
