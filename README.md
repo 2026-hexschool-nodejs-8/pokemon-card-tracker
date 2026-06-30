@@ -6,13 +6,13 @@
 
 ## 技術棧
 
-| 範圍 | 技術 |
-|---|---|
-| Monorepo | npm workspaces |
-| 後端 | Express · Zod · node-cron · JWT |
-| 前端 | Vite · React · shadcn/ui · Recharts |
-| 資料層 | PostgreSQL · Prisma |
-| 語言 | JavaScript（ESM）|
+| 範圍     | 技術                                |
+| -------- | ----------------------------------- |
+| Monorepo | npm workspaces                      |
+| 後端     | Express · Zod · node-cron · JWT     |
+| 前端     | Vite · React · shadcn/ui · Recharts |
+| 資料層   | PostgreSQL · Prisma                 |
+| 語言     | JavaScript（ESM）                   |
 
 ## 專案結構
 
@@ -43,6 +43,17 @@ npm install
 cp .env.example .env
 cp apps/web/.env.example apps/web/.env
 #   ⚠ 記得把 .env 裡的 JWT_SECRET 改成隨機字串
+
+**取得 TCGPLAYER_COOKIE：**
+-- 使用爬蟲工具前置作業
+
+1. 瀏覽器開啟 [tcgplayer.com](https://www.tcgplayer.com)
+2. 開 DevTools → Network → 任意請求 → Headers → 複製 `Cookie` 欄位值
+3. 貼入 `.env`
+4. TCGPLAYER_COOKIE=你的Cookie
+
+> Cookie 過期會收到 403，需重新複製。
+
 
 # 3. 啟動 PostgreSQL（用本專案附的 docker-compose）
 docker compose up -d db
@@ -80,34 +91,34 @@ Job xxx 結束：success（成功 N / 失敗 0）
 
 ## 常用指令（皆從根目錄執行）
 
-| 指令 | 說明 |
-|---|---|
-| `npm run dev:api` | 啟動後端（含每日排程） |
-| `npm run dev:web` | 啟動前端 |
-| `npm run db:migrate` | 建立 / 更新資料表 |
-| `npm run db:seed` | 重新灌 Demo 資料 |
-| `npm run db:reset` | 清庫並重跑 migration |
-| `npm run db:studio` | 開 Prisma Studio 看資料 |
-| `npm run job:once` | 手動跑一次抓價 |
+| 指令                 | 說明                    |
+| -------------------- | ----------------------- |
+| `npm run dev:api`    | 啟動後端（含每日排程）  |
+| `npm run dev:web`    | 啟動前端                |
+| `npm run db:migrate` | 建立 / 更新資料表       |
+| `npm run db:seed`    | 重新灌 Demo 資料        |
+| `npm run db:reset`   | 清庫並重跑 migration    |
+| `npm run db:studio`  | 開 Prisma Studio 看資料 |
+| `npm run job:once`   | 手動跑一次抓價          |
 
 ## API 一覽
 
-| Method | Path | 權限 | 說明 |
-|---|---|---|---|
-| GET | `/health` | 公開 | 服務狀態 |
-| GET | `/cards` | 公開 | 卡牌列表（`keyword`/`language`/`grade`）|
-| GET | `/cards/:id` | 公開 | 卡牌詳情 |
-| GET | `/cards/:id/prices` | 公開 | 歷史價格 |
-| POST | `/admin/auth/login` | 公開 | 管理者登入取得 JWT |
-| POST | `/admin/cards` | 管理者 | 新增卡牌 |
-| PATCH | `/admin/cards/:id` | 管理者 | 編輯卡牌 |
-| DELETE | `/admin/cards/:id` | 管理者 | 停用卡牌 |
-| POST | `/admin/cards/:id/sources` | 管理者 | 新增來源 |
-| PATCH | `/admin/sources/:id` | 管理者 | 編輯來源 |
-| POST | `/admin/jobs/price-sync` | 管理者 | 手動更新全部 |
-| POST | `/admin/cards/:id/price-sync` | 管理者 | 手動更新單張 |
-| GET | `/admin/jobs` | 管理者 | job 列表 |
-| GET | `/admin/jobs/:id` | 管理者 | job 詳情與 log |
+| Method | Path                          | 權限   | 說明                                     |
+| ------ | ----------------------------- | ------ | ---------------------------------------- |
+| GET    | `/health`                     | 公開   | 服務狀態                                 |
+| GET    | `/cards`                      | 公開   | 卡牌列表（`keyword`/`language`/`grade`） |
+| GET    | `/cards/:id`                  | 公開   | 卡牌詳情                                 |
+| GET    | `/cards/:id/prices`           | 公開   | 歷史價格                                 |
+| POST   | `/admin/auth/login`           | 公開   | 管理者登入取得 JWT                       |
+| POST   | `/admin/cards`                | 管理者 | 新增卡牌                                 |
+| PATCH  | `/admin/cards/:id`            | 管理者 | 編輯卡牌                                 |
+| DELETE | `/admin/cards/:id`            | 管理者 | 停用卡牌                                 |
+| POST   | `/admin/cards/:id/sources`    | 管理者 | 新增來源                                 |
+| PATCH  | `/admin/sources/:id`          | 管理者 | 編輯來源                                 |
+| POST   | `/admin/jobs/price-sync`      | 管理者 | 手動更新全部                             |
+| POST   | `/admin/cards/:id/price-sync` | 管理者 | 手動更新單張                             |
+| GET    | `/admin/jobs`                 | 管理者 | job 列表                                 |
+| GET    | `/admin/jobs/:id`             | 管理者 | job 詳情與 log                           |
 
 ## 資料來源說明
 
