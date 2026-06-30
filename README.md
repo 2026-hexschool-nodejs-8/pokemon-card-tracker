@@ -54,7 +54,6 @@ cp apps/web/.env.example apps/web/.env
 
 > Cookie 過期會收到 403，需重新複製。
 
-
 # 3. 啟動 PostgreSQL（用本專案附的 docker-compose）
 docker compose up -d db
 
