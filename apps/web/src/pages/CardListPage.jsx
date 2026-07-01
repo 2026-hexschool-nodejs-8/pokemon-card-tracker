@@ -12,15 +12,11 @@ function getBadge(c) {
   return null;
 }
 
-function SkeletonCard({ delay }) {
+function SkeletonCard() {
   return (
     <div
-      className="break-inside-avoid mb-6 rounded-2xl overflow-hidden bg-white card-appear"
-      style={{
-        boxShadow: "0 4px 12px rgba(59,76,202,0.08)",
-        animationDelay: `${delay}s`,
-        opacity: 0,
-      }}
+      className="break-inside-avoid mb-6 rounded-2xl overflow-hidden bg-white"
+      style={{ boxShadow: "0 4px 12px rgba(59,76,202,0.08)" }}
     >
       <div className="h-44 bg-[#EEF1FF] animate-pulse" />
       <div className="p-4 space-y-2">
@@ -97,7 +93,7 @@ export default function CardListPage() {
       {loading && (
         <div className="card-grid">
           {Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonCard key={i} delay={i * 0.05} />
+            <SkeletonCard key={i} />
           ))}
         </div>
       )}
@@ -122,8 +118,7 @@ export default function CardListPage() {
               <Link
                 key={c.id}
                 to={`/cards/${c.id}`}
-                className="card-appear break-inside-avoid mb-6 block group"
-                style={{ animationDelay: `${index * 0.05}s`, opacity: 0 }}
+                className="break-inside-avoid mb-6 block group"
               >
                 <div
                   className="bg-white rounded-2xl overflow-hidden relative transition-all duration-300
