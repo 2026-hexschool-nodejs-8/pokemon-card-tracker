@@ -62,10 +62,14 @@ router.patch(
   }),
 );
 
-// DELETE /admin/cards/:id － 停用追蹤（soft delete）
+// DELETE /admin/cards/:id － 停用追蹤（soft delete）；帶 ?hard=true 則永久刪除（連同 sources/snapshots，DB cascade 處理）
 router.delete(
   '/cards/:id',
   asyncHandler(async (req, res) => {
+    if (req.query.hard === 'true') {
+      await prisma.card.delete({ where: { id: req.params.id } });
+      return res.json({ data: { id: req.params.id, deleted: true } });
+    }
     await prisma.card.update({ where: { id: req.params.id }, data: { isActive: false } });
     res.json({ data: { id: req.params.id, isActive: false } });
   }),
