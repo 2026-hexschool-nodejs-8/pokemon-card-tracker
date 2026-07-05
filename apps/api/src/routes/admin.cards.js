@@ -11,6 +11,7 @@ import {
 } from '@pct/shared';
 import { adminAuth } from '../middleware/adminAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { notFound } from '../lib/httpError.js';
 
 const router = Router();
 router.use(adminAuth);
@@ -79,6 +80,31 @@ router.post(
       data: { ...data, cardId: req.params.id },
     });
     res.status(201).json({ data: source });
+  }),
+);
+
+// GET /admin/cards/:id/sources － 查看某張卡所有來源（含停用）
+router.get(
+  '/cards/:id/sources',
+  asyncHandler(async (req, res) => {
+    const card = await prisma.card.findUnique({ where: { id: req.params.id } });
+    if (!card) throw notFound('找不到這張卡牌');
+    const sources = await prisma.priceSource.findMany({
+      where: { cardId: req.params.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    res.json({ data: sources });
+  }),
+);
+
+// DELETE /admin/sources/:id － 停用來源（soft delete）
+router.delete(
+  '/sources/:id',
+  asyncHandler(async (req, res) => {
+    const source = await prisma.priceSource.findUnique({ where: { id: req.params.id } });
+    if (!source) throw notFound('找不到這個來源');
+    await prisma.priceSource.update({ where: { id: req.params.id }, data: { isActive: false } });
+    res.json({ data: { id: req.params.id, isActive: false } });
   }),
 );
 
