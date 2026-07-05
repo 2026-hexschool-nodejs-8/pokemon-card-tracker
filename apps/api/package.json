@@ -4,15 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --env-file=../../.env --watch src/index.js",
-    "start": "node --env-file=../../.env src/index.js",
-    "job:once": "node --env-file=../../.env src/scripts/runJobOnce.js"
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "job:once": "node src/scripts/runJobOnce.js"
   },
   "dependencies": {
     "@pct/db": "*",
     "@pct/shared": "*",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3"
