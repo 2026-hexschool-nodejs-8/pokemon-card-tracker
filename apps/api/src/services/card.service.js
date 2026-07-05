@@ -23,7 +23,7 @@ export async function listCards({ keyword, language, grade } = {}) {
 
 export async function getCardById(id) {
   const card = await prisma.card.findUnique({
-    where: { id },
+    where: { id, isActive: true },
     include: { sources: { where: { isActive: true } } },
   });
   if (!card) throw notFound('找不到這張卡牌');
