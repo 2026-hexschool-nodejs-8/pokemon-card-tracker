@@ -1,5 +1,6 @@
 // 手動跑一次抓價（不啟動 server）－ 方便驗證主流程與 Demo
 // 執行：npm run job:once（從根目錄）
+import '../loadEnv.js';
 import { prisma } from '@pct/db';
 import { JOB_TRIGGER_TYPE } from '@pct/shared';
 import { runPriceSync } from '../services/priceSync.service.js';
