@@ -7,12 +7,39 @@ import {
   updateCardSchema,
   createSourceSchema,
   updateSourceSchema,
+  adminListCardsQuerySchema,
 } from '@pct/shared';
 import { adminAuth } from '../middleware/adminAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 
 const router = Router();
 router.use(adminAuth);
+
+// GET /admin/cards?keyword=&language=&grade=&isActive=true|false
+router.get(
+  '/cards',
+  asyncHandler(async (req, res) => {
+    const { keyword, language, grade, isActive } = adminListCardsQuerySchema.parse(req.query);
+    const cards = await prisma.card.findMany({
+      where: {
+        ...(isActive !== undefined ? { isActive } : {}),
+        ...(language ? { language } : {}),
+        ...(grade ? { condition: grade } : {}),
+        ...(keyword
+          ? {
+              OR: [
+                { name: { contains: keyword, mode: 'insensitive' } },
+                { cardNumber: { contains: keyword, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: { updatedAt: 'desc' },
+      include: { _count: { select: { sources: true } } },
+    });
+    res.json({ data: cards });
+  }),
+);
 
 // POST /admin/cards
 router.post(
