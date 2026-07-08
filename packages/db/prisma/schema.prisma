@@ -153,3 +153,13 @@ model PriceFetchLog {
 
   @@index([jobId])
 }
+
+// ── 匯率（各幣別對台幣）──
+// 由匯率 API 定期更新、覆蓋寫入（每個幣別一列）；供價格清洗換算成 TWD 使用。
+model Currency {
+  code      String   @id      // 幣別代碼：USD / JPY / HKD / TWD（TWD 自己 = 1）
+  rateToTwd Float              // 1 單位該幣別 = 幾元台幣
+  source    String?           // 匯率資料來源（e.g. "open.er-api.com"）
+  fetchedAt DateTime          // 匯率 API 提供的資料時間
+  updatedAt DateTime @updatedAt // 本地寫入（覆蓋）時間
+}
