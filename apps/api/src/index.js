@@ -1,5 +1,5 @@
 // 進入點：啟動 Express server 與排程
-import './loadEnv.js';
+import '@pct/shared/load-env';
 import { createApp } from './app.js';
 import { startCron } from './scheduler/cron.js';
 import { logger } from './lib/logger.js';

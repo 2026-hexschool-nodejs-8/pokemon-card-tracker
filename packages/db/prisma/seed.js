@@ -1,5 +1,6 @@
 // Seed 資料 － 對應 PRD 第二十九章
 // 執行：npm run db:seed（從根目錄）
+import '@pct/shared/load-env';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../index.js';
 
