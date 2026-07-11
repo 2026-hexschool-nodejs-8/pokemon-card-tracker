@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "job:once": "node src/scripts/runJobOnce.js"
+    "job:once": "node src/scripts/runJobOnce.js",
+    "test": "node --test"
   },
   "dependencies": {
     "@pct/db": "*",

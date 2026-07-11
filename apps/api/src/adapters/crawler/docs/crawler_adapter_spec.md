@@ -1,30 +1,3 @@
----
-
-name: crawler adapter spec
-overview: 為 Crawler / Integration 角色撰寫的開發規格書：在既有資料管線骨架上，直接以 JS 實作 4 個 crawler adapter（不做 API adapter、不走 Python 先行），並確保錯誤處理符合 PRD 第十八章。
-todos:
-
-- id: source-selection
-content: 階段 0：選定 4 個 crawler 來源，用 curl 驗證可行性（確認 HTML 原始碼直接含價格文字或可解析的價格屬性，非 JS 動態渲染），產出來源選擇表
-status: completed
-- id: js-crawler-adapters
-content: 安裝 cheerio（npm i cheerio -w @pct/api），在 apps/api/src/adapters/crawler/ 直接以 JS 新增 4 個 crawler adapter（cardland / rakuten / priceCharting / yuyutei），import assertPriceResult，回傳 rawText（不清洗），selector 找不到時 throw
-status: completed
-- id: register
-content: 在 apps/api/src/adapters/registry.js import 並註冊 4 個新 crawler adapter
-status: completed
-- id: integration-test
-content: 階段 3：於 DB 建立對應的真實 PriceSource，執行 npm run job:once 驗證快照與 log 正確落地
-status: in_progress
-- id: error-cases
-content: 階段 4：驗收錯誤情境（selector 改壞、空值、逾時），確認單一來源失敗會記 log 且 job 變 partial_success，並保留 mock adapter 作為 Demo 備援
-status: pending
-isProject: false
-
----
-
-
-
 # 抓價 Adapter 開發規格書（Crawler / Integration）
 
 
@@ -111,6 +84,7 @@ flowchart TD
 2. 實作 4 個 crawler adapter，import `assertPriceResult`；用 repo 內的測試 HTML（`crawler source test htmls/`）以 cheerio 驗證各 selector 抓得到值。
 3. 於 [apps/api/src/adapters/registry.js](apps/api/src/adapters/registry.js) 註冊 adapter。
 4. 階段 3：DB 建真實 `PriceSource`（4 筆 crawler），跑 `npm run job:once -w @pct/api -- <cardId>` 驗證快照落地。
+  - 建資料：`npm run seed:real-sources`（腳本：[apps/api/src/scripts/seedRealSources.js](apps/api/src/scripts/seedRealSources.js)）
 5. 階段 4：跑錯誤情境 + 準備 mock 備援。
 
 
@@ -125,6 +99,62 @@ flowchart TD
 
 
 
-## 8. 不在本次範圍（加分項）
+## 8. 階段 3 整合驗收（已完成）
+
+執行方式：
+
+```bash
+npm run seed:real-sources
+npm run job:once -w @pct/api -- <cardId>
+```
+
+驗證結果（2026-07-12）：
+
+- 卡牌：`Pikachu with Grey Felt Hat`（`cmrgnki860000fhtocnqtbjfc`）
+- Job 狀態：`success`（4 / 4 來源成功）
+- 4 筆 `PriceSnapshot` 已落地
+- 4 筆 `PriceFetchLog` 皆為 `success`
+- `Card.latestPrice` 已更新
+
+
+| provider      | rawText  | price | currency |
+| ------------- | -------- | ----- | -------- |
+| cardland      | $200     | 200   | HKD      |
+| yuyutei       | 17,800 円 | 17800 | JPY      |
+| pricecharting | $922.00  | 922   | USD      |
+| rakuten       | 170      | 170   | JPY      |
+
+
+
+
+## 9. 階段 4 自動化驗收（已完成）
+
+執行方式（repo 根目錄）：
+
+```bash
+npm test
+```
+
+測試檔：
+
+- [apps/api/src/adapters/crawler/crawler.error-cases.test.js](apps/api/src/adapters/crawler/crawler.error-cases.test.js) — adapter 層
+- [apps/api/src/services/priceSync.error-cases.test.js](apps/api/src/services/priceSync.error-cases.test.js) — service 整合層（需 PostgreSQL）
+
+覆蓋情境：
+
+
+| 情境          | 驗證方式                                          | 預期結果                                      |
+| ----------- | --------------------------------------------- | ----------------------------------------- |
+| selector 改壞 | mock HTML 不含價格節點                              | adapter throw → failed log                |
+| HTTP 429    | mock fetch 回 429                              | adapter throw `HTTP 429` → failed log     |
+| 空值 / $0     | mock HTML 回 `$0`                              | normalizePrice 擋下 → failed log，無 snapshot |
+| 逾時          | mock fetch 永不 resolve + `FETCH_TIMEOUT_MS=20` | withTimeout 擋下 → failed log               |
+| 部分成功        | 5 來源中 1 成功 4 失敗                               | job = `partial_success`，僅 1 筆 snapshot    |
+| mock 備援     | provider 未知                                   | registry 退回 `mockCrawler`                 |
+
+
+修正：`cardland`、`pricecharting` adapter 的 `name` 已對齊 DB `PriceSource.provider` 小寫命名，避免誤走 mock fallback。
+
+## 10. 不在本次範圍（加分項）
 
 API adapter、`priceTwd` 匯率換算、多來源平均、Playwright 動態渲染、Queue，皆待主流程穩定後再議（PRD 第二十二章）。
