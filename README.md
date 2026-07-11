@@ -30,7 +30,7 @@ pokemon-card-tracker/
 
 ## 環境需求
 
-- Node.js >= 20（建議 20 或以上；本專案用原生 `--env-file`）
+- Node.js >= 20（建議 20 或以上；後端 API 用 `dotenv` 載入根目錄 `.env`）
 - Docker（用來起 PostgreSQL；若已有本機 / 雲端 DB 可略過）
 
 ## 快速開始

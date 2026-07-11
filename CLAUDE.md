@@ -40,7 +40,9 @@ packages/shared Zod schema、共用常數（@pct/shared，前後端共用）
 npm install              # 安裝全部 workspace（會自動 prisma generate）
 docker compose up -d db  # 起本機 PostgreSQL
 npm run db:migrate       # 建表
-npm run db:seed          # 灌 Demo 資料（admin@pct.local / admin1234）
+npm run db:seed          # 灌 Demo 卡牌 / 價格 / job（不含 admin）
+npm run db:seed:admin    # 建立 / 更新唯一 admin（讀 SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD，預設 admin@pct.local / admin1234）
+npm run db:seed:clear    # 清掉 demo 資料，但保留 admin
 npm run dev:api          # 後端 http://localhost:3000
 npm run dev:web          # 前端 http://localhost:5173
 npm run job:once         # 手動跑一次抓價，驗證主流程
