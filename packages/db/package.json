@@ -8,10 +8,11 @@
     ".": "./index.js"
   },
   "scripts": {
-    "seed": "node --env-file=../../.env prisma/seed.js",
+    "seed": "node prisma/seed.js",
     "studio": "prisma studio"
   },
   "dependencies": {
+    "@pct/shared": "*",
     "@prisma/client": "^6.5.0",
     "bcryptjs": "^2.4.3"
   },

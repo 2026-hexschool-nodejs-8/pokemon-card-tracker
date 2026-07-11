@@ -7,9 +7,11 @@
   "exports": {
     ".": "./index.js",
     "./schemas": "./schemas/index.js",
-    "./constants": "./constants/index.js"
+    "./constants": "./constants/index.js",
+    "./load-env": "./load-env.js"
   },
   "dependencies": {
+    "dotenv": "^16.6.1",
     "zod": "^3.23.8"
   }
 }
