@@ -6,8 +6,9 @@ import { priceChartingAdapter } from './crawler/priceCharting.adapter.js';
 import { cardLandAdapter } from './crawler/cardLand.adapter.js';
 import { yuyuteiAdapter } from './crawler/yuyutei.adapter.js';
 import { rakutenAdapter } from './crawler/rakuten.adapter.js';
+import { tcgdexApiAdapter } from './api/tcgdexApi.adapter.js';
 
-const adapters = [mockApiAdapter, mockCrawlerAdapter, priceChartingAdapter, cardLandAdapter, yuyuteiAdapter, rakutenAdapter];
+const adapters = [mockApiAdapter, mockCrawlerAdapter, priceChartingAdapter, cardLandAdapter, yuyuteiAdapter, rakutenAdapter, tcgdexApiAdapter];
 
 // 以 provider 名稱為 key
 const byProvider = new Map(adapters.map((a) => [a.name, a]));
