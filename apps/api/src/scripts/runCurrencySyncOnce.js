@@ -1,6 +1,6 @@
 // 手動跑一次匯率同步（不啟動 server）－ 方便驗證與 Demo
 // 執行：npm run currency:once（從根目錄）
-import '../loadEnv.js';
+import '@pct/shared/load-env'; 
 import { prisma } from '@pct/db';
 import { runCurrencySync } from '../services/currencySync.service.js';
 
