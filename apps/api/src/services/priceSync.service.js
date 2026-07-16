@@ -101,7 +101,7 @@ async function processOneSource(jobId, source, ratesToTwd) {
   const currency = result.currency || source.currency;
   const isSuspicious = isSuspiciousPrice(price, source.card.latestPrice);
 
-  // ↓↓↓ 新增：換算台幣（失敗回 null + reason，不中斷）
+  // 換算台幣（失敗回 null + reason，不中斷 job）
   const { priceTwd, reason: twdReason } = convertToTwd(price, currency, ratesToTwd);
   if (priceTwd === null) {
     logger.warn(`來源 ${source.provider}(${source.id}) 台幣換算失敗：${twdReason}`);
@@ -115,6 +115,7 @@ async function processOneSource(jobId, source, ratesToTwd) {
         provider: result.provider || source.provider,
         price,
         currency,
+        priceTwd,
         rawText: result.rawText ?? String(result.price),
         fetchedAt: new Date(result.fetchedAt || Date.now()),
         isSuspicious,

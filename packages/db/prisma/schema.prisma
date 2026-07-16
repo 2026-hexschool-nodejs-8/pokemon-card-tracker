@@ -63,7 +63,7 @@ model Card {
   // 由最新快照同步的摘要欄位
   latestPrice    Float?
   latestCurrency String?
-  latestPriceTwd  Float?     // ← 新增：最新台幣價，供前台列表直接顯示（換算失敗為 null）
+  latestPriceTwd Float? // 最新台幣價，供前台列表直接顯示（換算失敗為 null）
   lastFetchedAt  DateTime?
 
   createdAt      DateTime @default(now())

@@ -31,6 +31,6 @@ export function convertToTwd(price, currency, ratesToTwd) {
     return { priceTwd: null, reason: `${currency} 換算結果異常：${raw}` };
   }
 
-  // ④ 四捨五入到小數 2 位，避免浮點長尾（如 267.60000001）
+  // ④ 四捨五入到整數台幣（浮點相乘會有長尾，如 267.60000001）
   return { priceTwd: Math.round(raw), reason: null };
 }
