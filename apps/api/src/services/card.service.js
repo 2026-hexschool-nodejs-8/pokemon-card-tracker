@@ -37,11 +37,23 @@ export async function getCardPriceSummary(id) {
   const day7 = new Date(now - 7 * 24 * 60 * 60 * 1000);
   const day30 = new Date(now - 30 * 24 * 60 * 60 * 1000);
 
-  const [latest, price7dAgo, price30dAgo] = await Promise.all([
-    prisma.priceSnapshot.findFirst({ where: { cardId: id }, orderBy: { fetchedAt: 'desc' } }),
-    prisma.priceSnapshot.findFirst({ where: { cardId: id, fetchedAt: { lte: day7 } }, orderBy: { fetchedAt: 'desc' } }),
-    prisma.priceSnapshot.findFirst({ where: { cardId: id, fetchedAt: { lte: day30 } }, orderBy: { fetchedAt: 'desc' } }),
-  ]);
+  const latest = await prisma.priceSnapshot.findFirst({ where: { cardId: id }, orderBy: { fetchedAt: 'desc' } });
+
+  // 同一張卡可能綁多個不同幣別的來源，只拿跟 latest 同幣別的歷史快照比較，
+  // 避免拿不同幣別的 price 直接相減算出沒意義的漲跌幅。
+  // TODO(#23 priceTwd 換算合併後)：改成直接比較 priceTwd，就不用管幣別是否一致。
+  const [price7dAgo, price30dAgo] = latest
+    ? await Promise.all([
+        prisma.priceSnapshot.findFirst({
+          where: { cardId: id, currency: latest.currency, fetchedAt: { lte: day7 } },
+          orderBy: { fetchedAt: 'desc' },
+        }),
+        prisma.priceSnapshot.findFirst({
+          where: { cardId: id, currency: latest.currency, fetchedAt: { lte: day30 } },
+          orderBy: { fetchedAt: 'desc' },
+        }),
+      ])
+    : [null, null];
 
   const calcChange = (current, past) => {
     if (!current || !past || past.price === 0) return null;
