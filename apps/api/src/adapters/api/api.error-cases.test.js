@@ -32,10 +32,15 @@ const API_ADAPTER_FIXTURES = [
         cardmarket: {
           prices: { trendPrice: 12.34 },
         },
+        images: {
+          small: 'https://images.pokemontcg.io/hgss4/1.png',
+          large: 'https://images.pokemontcg.io/hgss4/1_hires.png',
+        },
       },
     },
     expectedPrice: 12.34,
     expectedCurrency: 'EUR',
+    expectedImageUrl: 'https://images.pokemontcg.io/hgss4/1.png',
     expectedHeaders: { 'X-Api-Key': process.env.TCGDEX_API_KEY },
     malformedBody: { data: {} },
     malformedError: /Cannot read properties|cardmarket|prices/,
@@ -86,8 +91,30 @@ for (const fixture of API_ADAPTER_FIXTURES) {
       assert.equal(result.provider, fixture.source.provider);
       assert.equal(result.price, fixture.expectedPrice);
       assert.equal(result.currency, fixture.expectedCurrency ?? fixture.source.currency);
+      if (fixture.expectedImageUrl) {
+        assert.equal(result.imageUrl, fixture.expectedImageUrl);
+      }
       assert.ok(result.fetchedAt);
       assert.doesNotThrow(() => new Date(result.fetchedAt).toISOString());
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  test(`api adapter ${label} omits imageUrl when images.small is missing`, async () => {
+    const bodyWithoutImages = {
+      data: {
+        cardmarket: {
+          prices: { trendPrice: fixture.expectedPrice },
+        },
+      },
+    };
+    const restoreFetch = mockFetch(async () => jsonResponse(bodyWithoutImages));
+
+    try {
+      const result = await fixture.adapter.fetchPrice(fixture.source);
+      assert.equal(result.price, fixture.expectedPrice);
+      assert.equal(result.imageUrl, undefined);
     } finally {
       restoreFetch();
     }

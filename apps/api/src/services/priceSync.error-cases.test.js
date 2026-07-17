@@ -20,7 +20,17 @@ function installFetchMock() {
         ok: true,
         status: 200,
         text: async () =>
-          '<table><tbody><tr><td id="used_price"><span class="price js-price">$948.43</span></td></tr></tbody></table>',
+          `<table><tbody><tr><td id="used_price"><span class="price js-price">$948.43</span></td></tr></tbody></table>
+           <div id="product_details"><img itemprop="image" src="https://images.example.test/card-success.jpg" /></div>`,
+      };
+    }
+
+    if (value.includes('/success-no-image')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          '<table><tbody><tr><td id="used_price"><span class="price js-price">$12.34</span></td></tr></tbody></table>',
       };
     }
 
@@ -162,6 +172,7 @@ test('runPriceSync records failures and finishes partial_success when only one c
     const updatedCard = await prisma.card.findUnique({ where: { id: card.id } });
     assert.equal(updatedCard.latestPrice, 948.43);
     assert.equal(updatedCard.latestCurrency, 'USD');
+    assert.equal(updatedCard.imageUrl, 'https://images.example.test/card-success.jpg');
     assert.ok(updatedCard.lastFetchedAt);
   } finally {
     restoreFetch();
@@ -170,6 +181,116 @@ test('runPriceSync records failures and finishes partial_success when only one c
       await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
     }
 
+    if (card?.id) {
+      await prisma.card.delete({ where: { id: card.id } }).catch(() => {});
+    }
+  }
+});
+
+test('runPriceSync writes imageUrl only when card.imageUrl is empty', async (t) => {
+  if (!(await canReachDatabase())) {
+    t.skip('database is not reachable; start postgres and run migrations to execute this integration test');
+    return;
+  }
+
+  const runningJobs = await prisma.priceFetchJob.count({ where: { status: 'running' } });
+  if (runningJobs > 0) {
+    t.skip('a price fetch job is already running');
+    return;
+  }
+
+  const restoreFetch = installFetchMock();
+  const existingImage = 'https://images.example.test/already-set.jpg';
+  let card;
+  let job;
+
+  try {
+    card = await prisma.card.create({
+      data: {
+        name: `Phase 4 Image Guard ${TEST_RUN_ID}`,
+        cardNumber: `${TEST_RUN_ID}-img`,
+        setName: 'Phase 4',
+        language: 'ja',
+        condition: 'raw',
+        imageUrl: existingImage,
+        sources: {
+          create: [
+            {
+              type: 'crawler',
+              provider: 'priceCharting',
+              url: `https://example.test/${TEST_RUN_ID}/success`,
+              currency: 'USD',
+            },
+          ],
+        },
+      },
+    });
+
+    job = await runPriceSync({ triggerType: 'manual', cardId: card.id });
+    assert.equal(job.status, 'success');
+
+    const updatedCard = await prisma.card.findUnique({ where: { id: card.id } });
+    assert.equal(updatedCard.imageUrl, existingImage);
+    assert.equal(updatedCard.latestPrice, 948.43);
+  } finally {
+    restoreFetch();
+    if (job?.id) {
+      await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
+    }
+    if (card?.id) {
+      await prisma.card.delete({ where: { id: card.id } }).catch(() => {});
+    }
+  }
+});
+
+test('runPriceSync keeps card.imageUrl empty and succeeds when adapter omits image', async (t) => {
+  if (!(await canReachDatabase())) {
+    t.skip('database is not reachable; start postgres and run migrations to execute this integration test');
+    return;
+  }
+
+  const runningJobs = await prisma.priceFetchJob.count({ where: { status: 'running' } });
+  if (runningJobs > 0) {
+    t.skip('a price fetch job is already running');
+    return;
+  }
+
+  const restoreFetch = installFetchMock();
+  let card;
+  let job;
+
+  try {
+    card = await prisma.card.create({
+      data: {
+        name: `Phase 4 No Image ${TEST_RUN_ID}`,
+        cardNumber: `${TEST_RUN_ID}-noimg`,
+        setName: 'Phase 4',
+        language: 'ja',
+        condition: 'raw',
+        sources: {
+          create: [
+            {
+              type: 'crawler',
+              provider: 'priceCharting',
+              url: `https://example.test/${TEST_RUN_ID}/success-no-image`,
+              currency: 'USD',
+            },
+          ],
+        },
+      },
+    });
+
+    job = await runPriceSync({ triggerType: 'manual', cardId: card.id });
+    assert.equal(job.status, 'success');
+
+    const updatedCard = await prisma.card.findUnique({ where: { id: card.id } });
+    assert.equal(updatedCard.imageUrl, null);
+    assert.equal(updatedCard.latestPrice, 12.34);
+  } finally {
+    restoreFetch();
+    if (job?.id) {
+      await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
+    }
     if (card?.id) {
       await prisma.card.delete({ where: { id: card.id } }).catch(() => {});
     }
