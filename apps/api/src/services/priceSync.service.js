@@ -92,6 +92,23 @@ async function processOneSource(jobId, source) {
   const currency = result.currency || source.currency;
   const isSuspicious = isSuspiciousPrice(price, source.card.latestPrice);
 
+  const cardUpdate = {
+    latestPrice: price,
+    latestCurrency: currency,
+    lastFetchedAt: new Date(),
+  };
+
+  const needsImage = !source.card.imageUrl;
+  const imageUrl = typeof result.imageUrl === 'string' ? result.imageUrl.trim() : '';
+  const isValidImage = /^https?:\/\//i.test(imageUrl);
+
+  if (needsImage && isValidImage) {
+    cardUpdate.imageUrl = imageUrl;
+    logger.info(`Card ${source.cardId} 寫入 imageUrl（來源 ${source.provider}）`);
+  } else if (needsImage && !isValidImage) {
+    logger.warn(`Card ${source.cardId} 缺 imageUrl（來源 ${source.provider}）`);
+  }
+
   await prisma.$transaction([
     prisma.priceSnapshot.create({
       data: {
@@ -107,7 +124,7 @@ async function processOneSource(jobId, source) {
     }),
     prisma.card.update({
       where: { id: source.cardId },
-      data: { latestPrice: price, latestCurrency: currency, lastFetchedAt: new Date() },
+      data: cardUpdate,
     }),
     prisma.priceSource.update({
       where: { id: source.id },

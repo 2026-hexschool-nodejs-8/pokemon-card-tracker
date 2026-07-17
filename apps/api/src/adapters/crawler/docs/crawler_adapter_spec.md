@@ -27,10 +27,17 @@
 - `rawText?: string`（本次 4 個 crawler 都填這個，保留 `¥12,345` / `$948.43` 原始文字，**不自己清洗**）
 - `price?: number`（API 來源用；本次不使用）
 - `fetchedAt: string`（ISO 時間）
+- `imageUrl?: string`（可選；同次抓取得到的卡圖 URL。**缺圖不 throw**，省略欄位即可）
 
 adapter 物件形狀：`{ type, name, async fetchPrice(source) }`，本次 `type` 一律為 `'crawler'`，`name` 對應 `PriceSource.provider`。
 
-service 會統一清洗：`normalizePrice(result.rawText ?? result.price)`（見 [apps/api/src/services/priceSync.service.js](apps/api/src/services/priceSync.service.js) 第 91 行）。
+service 會統一清洗：`normalizePrice(result.rawText ?? result.price)`（見 [apps/api/src/services/priceSync.service.js](apps/api/src/services/priceSync.service.js)）。
+
+### 可選 imageUrl
+
+- adapter 在既有 HTML 解析時順便取圖（見各 adapter 的 `IMAGE_SELECTOR`）；找不到就不要帶 `imageUrl`。
+- **寫入規則在 service**：僅當 `Card.imageUrl` 為空且結果有合法 `http(s)` URL 時才寫入；需要補圖卻沒拿到時由 service `logger.warn`。
+- 圖片不影響價格成功／失敗判定。
 
 ## 3. 資料流（整合位置）
 
@@ -67,10 +74,10 @@ flowchart TD
 
 各來源 selector：
 
-- cardland：`p.price.product-page-price`
-- rakuten：`meta[itemprop="price"]`（取 `content` 屬性）
-- pricecharting：`#used_price .price.js-price`
-- yuyutei：`h4.fw-bold.d-inline-block`
+- cardland：價格 `p.price.product-page-price`；圖片 `meta[property="og:image"]`（`content`）
+- rakuten：價格 `meta[itemprop="price"]`（`content`）；圖片 `meta[property="og:image"]`（`content`）
+- pricecharting：價格 `#used_price .price.js-price`；圖片 `#product_details img[itemprop="image"]`（`src`）
+- yuyutei：價格 `h4.fw-bold.d-inline-block`；圖片 `img.vimg`（`src`）
 
 
 
