@@ -3,8 +3,10 @@
 // 回傳帶符號的 rawText（例 "17,800 円"），清洗交給 service 的 normalizePrice
 import * as cheerio from 'cheerio';
 import { assertPriceResult } from '../contract.js';
+import { resolveImageUrl } from '../resolveImageUrl.js';
 
 const PRICE_SELECTOR = 'h4.fw-bold.d-inline-block';
+const IMAGE_SELECTOR = 'img.vimg';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)';
 
 export const yuyuteiAdapter = {
@@ -20,11 +22,14 @@ export const yuyuteiAdapter = {
     const rawText = $(PRICE_SELECTOR).first().text().trim();
     if (!rawText) throw new Error('找不到價格 selector（頁面可能改版）');
 
+    const imageUrl = resolveImageUrl($(IMAGE_SELECTOR).first().attr('src'), source.url);
+
     return assertPriceResult({
       provider: source.provider,
       rawText,
       currency: source.currency || 'JPY',
       fetchedAt: new Date().toISOString(),
+      ...(imageUrl ? { imageUrl } : {}),
     });
   },
 };
