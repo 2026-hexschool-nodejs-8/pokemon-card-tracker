@@ -1,4 +1,6 @@
-// 匯率抓取 － W2 會議決策：全部幣別統一換算為台幣（TWD）
+// 匯率來源 adapter － 對外打匯率 API 的細節都收在這裡（回應 review：對外 API 放 adapters、lib 留純工具）。
+// 不進 registry：registry 管的是「卡牌價格來源」，匯率不是價格來源，由 currencySync 直接使用。
+//
 // 來源預設 open.er-api.com（免費、免金鑰、支援 TWD）。
 // 回傳「1 單位外幣 = 幾元台幣」（rateToTwd），供 currencySync 寫入 Currency 表。
 import { BASE_CURRENCY, FOREIGN_CURRENCIES } from '@pct/shared';
@@ -40,6 +42,12 @@ export async function fetchRatesToTwd() {
   if (body?.result && body.result !== 'success') {
     throw new ExchangeRateError(`匯率 API 回應非成功：${body['error-type'] || body.result}`);
   }
+
+  // 驗證 API 自我聲明的基準幣：擋掉「格式相同、基準不同」的端點
+  if (body?.base_code && body.base_code !== BASE_CURRENCY) {
+    throw new ExchangeRateError(`匯率基準幣不符：預期 ${BASE_CURRENCY}，API 回 ${body.base_code}`);
+  }
+
   const perTwd = body?.rates;
   if (!perTwd || typeof perTwd !== 'object') {
     throw new ExchangeRateError('匯率 API 回應缺少 rates 欄位');
