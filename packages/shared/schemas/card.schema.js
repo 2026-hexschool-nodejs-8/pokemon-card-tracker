@@ -21,3 +21,11 @@ export const listCardsQuerySchema = z.object({
   language: z.enum(SUPPORTED_LANGUAGES).optional(),
   grade: z.string().optional(),
 });
+
+// 後台列表查詢參數（多一個 isActive 篩選，不帶時回傳全部）
+export const adminListCardsQuerySchema = listCardsQuerySchema.extend({
+  isActive: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+});
