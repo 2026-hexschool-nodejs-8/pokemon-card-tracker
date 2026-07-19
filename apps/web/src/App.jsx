@@ -1,10 +1,14 @@
-import { Routes, Route, Link } from "react-router-dom";
+import { Routes, Route, Link, useLocation } from "react-router-dom";
 import CardListPage from "./pages/CardListPage.jsx";
 import CardDetailPage from "./pages/CardDetailPage.jsx";
 import LoginPage from "./pages/admin/LoginPage.jsx";
 import AdminPage from "./pages/admin/AdminPage.jsx";
 
 export default function App() {
+  // 每次點擊導覽連結（含同路徑）location.key 都會更新，
+  // 用它當 key 讓 CardListPage 重新掛載，清空搜尋狀態回到初始畫面
+  const location = useLocation();
+
   return (
     <div className="min-h-screen" style={{ background: "#050505" }}>
       <header style={{ background: "#CC0000" }} className="shadow-md">
@@ -33,7 +37,7 @@ export default function App() {
 
       <main className="container py-8">
         <Routes>
-          <Route path="/" element={<CardListPage />} />
+          <Route path="/" element={<CardListPage key={location.key} />} />
           <Route path="/cards/:id" element={<CardDetailPage />} />
           <Route path="/admin/login" element={<LoginPage />} />
           <Route path="/admin" element={<AdminPage />} />

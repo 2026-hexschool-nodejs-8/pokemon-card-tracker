@@ -15,9 +15,12 @@
     "db:generate": "prisma generate --schema=packages/db/prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema=packages/db/prisma/schema.prisma",
     "db:reset": "prisma migrate reset --schema=packages/db/prisma/schema.prisma",
-    "db:seed": "node --env-file=.env packages/db/prisma/seed.js",
+    "db:seed": "node packages/db/prisma/seed.js",
+    "db:seed:admin": "node packages/db/prisma/seedAdmin.js",
+    "db:seed:clear": "node packages/db/prisma/seedClear.js",
     "db:studio": "prisma studio --schema=packages/db/prisma/schema.prisma",
     "job:once": "npm run job:once -w @pct/api",
+    "currency:once": "npm run currency:once -w @pct/api",
     "postinstall": "prisma generate --schema=packages/db/prisma/schema.prisma"
   },
   "devDependencies": {

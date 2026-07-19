@@ -1,29 +1,18 @@
-// Seed 資料 － 對應 PRD 第二十九章
+// Seed 資料 － 對應 PRD 第二十九章（demo 卡牌 / 價格 / job，不含 Admin）
 // 執行：npm run db:seed（從根目錄）
-import bcrypt from 'bcryptjs';
+// 註：Admin 已獨立成 seedAdmin.js（本專案無註冊功能），此腳本不建也不刪 Admin。
+import '@pct/shared/load-env';
 import { prisma } from '../index.js';
 
 async function main() {
   console.log('🌱 開始 seed...');
 
-  // ── 清空（方便重複執行）──
+  // ── 清空 demo 資料（方便重複執行）；Admin 不動 ──
   await prisma.priceFetchLog.deleteMany();
   await prisma.priceFetchJob.deleteMany();
   await prisma.priceSnapshot.deleteMany();
   await prisma.priceSource.deleteMany();
   await prisma.card.deleteMany();
-  await prisma.admin.deleteMany();
-
-  // ── 管理者帳號（JWT 登入用）──
-  const passwordHash = await bcrypt.hash('admin1234', 10);
-  await prisma.admin.create({
-    data: {
-      email: 'admin@pct.local',
-      passwordHash,
-      name: '管理者',
-    },
-  });
-  console.log('✅ 建立管理者：admin@pct.local / admin1234');
 
   // ── 卡牌 ──
   const pikachu = await prisma.card.create({
@@ -96,7 +85,22 @@ async function main() {
     },
   });
 
-  console.log('✅ 建立 4 張卡牌（含 1 張高價、1 張尚未抓價）');
+  // 一張「已停用追蹤」的卡（測試停用卡公開 API 回 404）
+  await prisma.card.create({
+    data: {
+      name: 'フシギバナ EX',
+      cardNumber: '003/EX-P',
+      setName: 'EX Series',
+      language: 'ja',
+      condition: 'raw',
+      isActive: false,
+      sources: {
+        create: [{ type: 'api', provider: 'mockApi', externalId: 'bulbasaur-ex', currency: 'JPY' }],
+      },
+    },
+  });
+
+  console.log('✅ 建立 5 張卡牌（含 1 張高價、1 張尚未抓價、1 張已停用追蹤）');
 
   // ── 歷史快照（為前 3 張卡各灌幾筆，形成趨勢）──
   const seedSnapshots = [

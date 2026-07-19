@@ -1,8 +1,9 @@
 // 與後端 API 溝通的薄封裝
-// dev 模式走 vite proxy（/api → http://localhost:3000）
+// dev：BASE 留 '/api'，走 vite proxy（/api → http://localhost:3000，免 CORS）
+// 正式（如 Render）：設 VITE_API_BASE_URL 為後端完整網址，直接打後端
 import { getToken, clearToken } from './auth.js';
 
-const BASE = '/api';
+const BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 async function request(path, { method = 'GET', body, auth = false } = {}) {
   const headers = { 'Content-Type': 'application/json' };
