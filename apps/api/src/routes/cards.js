@@ -1,7 +1,7 @@
 // 前台公開 API － PRD FR-03 / FR-04 / 建議 API Public 段
 import { Router } from 'express';
 import { listCardsQuerySchema } from '@pct/shared';
-import { listCards, getCardById, getCardPrices } from '../services/card.service.js';
+import { listCards, getCardById, getCardPrices, getCardPriceSummary } from '../services/card.service.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 
 const router = Router();
@@ -22,6 +22,15 @@ router.get(
   asyncHandler(async (req, res) => {
     const card = await getCardById(req.params.id);
     res.json({ data: card });
+  }),
+);
+
+// GET /cards/:id/prices/summary － 7 / 30 天漲跌幅
+router.get(
+  '/:id/prices/summary',
+  asyncHandler(async (req, res) => {
+    const summary = await getCardPriceSummary(req.params.id);
+    res.json({ data: summary });
   }),
 );
 
