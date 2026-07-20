@@ -111,7 +111,7 @@ flowchart TD
 ## 6. 開發流程
 
 1. 階段 0 可行性驗證：對 4 個候選來源做 `curl` 測試，確認 HTML 原始碼直接含價格文字或可解析的價格屬性（否則為 JS 動態渲染，需換來源或改 Playwright）。
-2. 實作 4 個 crawler adapter，import `assertPriceResult`；用 repo 內的測試 HTML（`crawler source test htmls/`）以 cheerio 驗證各 selector 抓得到值。
+2. 實作 4 個 crawler adapter，import `assertPriceResult`；用 repo 內的測試 HTML（`apps/api/src/adapters/crawler/fixtures/`）以 cheerio 驗證各 selector 抓得到值。
 3. 於 [apps/api/src/adapters/registry.js](apps/api/src/adapters/registry.js) 註冊 adapter。
 4. 階段 3：DB 建真實資料——**4 張卡牌，各掛 1 筆 crawler `PriceSource`**（來源 URL 對應不同商品頁，不可併到同一張卡），再跑抓價驗證快照落地。
   - 建資料：`npm run seed:real-sources`（腳本：[apps/api/src/scripts/seedRealSources.js](apps/api/src/scripts/seedRealSources.js)）

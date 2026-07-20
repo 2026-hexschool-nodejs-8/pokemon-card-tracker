@@ -11,7 +11,7 @@ import { yuyuteiAdapter } from './yuyutei.adapter.js';
 
 const FIXTURE_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../../../../crawler source test htmls',
+  'fixtures',
 );
 
 function mockFetchOnce(response) {
