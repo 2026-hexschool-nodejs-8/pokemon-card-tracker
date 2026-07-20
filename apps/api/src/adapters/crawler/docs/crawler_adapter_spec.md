@@ -1,7 +1,5 @@
 # 抓價 Adapter 開發規格書（Crawler / Integration）
 
-
-
 ## 1. 範圍與責任邊界
 
 本規格對應 PRD 第二十章角色「Crawler / Integration」，交付項目為 PRD FR-07 / FR-14。
@@ -15,8 +13,6 @@
 
 - adapter 只做「連線 + 抓取 + 解析成 `PriceResult`」。
 - 不在 adapter 內：寫 DB、清洗數字、設 timeout、管 job 狀態（皆為 service 責任）。
-
-
 
 ## 2. 介面契約（不可更改）
 
@@ -51,9 +47,9 @@ flowchart TD
 
 4 個檔案，各自對應一個來源：
 
-- [apps/api/src/adapters/crawler/cardland.adapter.js](apps/api/src/adapters/crawler/cardland.adapter.js)（`name: cardland`）
+- [apps/api/src/adapters/crawler/cardLand.adapter.js](apps/api/src/adapters/crawler/cardLand.adapter.js)（`name: cardLand`）
 - [apps/api/src/adapters/crawler/rakuten.adapter.js](apps/api/src/adapters/crawler/rakuten.adapter.js)（`name: rakuten`）
-- [apps/api/src/adapters/crawler/priceCharting.adapter.js](apps/api/src/adapters/crawler/priceCharting.adapter.js)（`name: pricecharting`）
+- [apps/api/src/adapters/crawler/priceCharting.adapter.js](apps/api/src/adapters/crawler/priceCharting.adapter.js)（`name: priceCharting`）
 - [apps/api/src/adapters/crawler/yuyutei.adapter.js](apps/api/src/adapters/crawler/yuyutei.adapter.js)（`name: yuyutei`）
 
 共同模板：
@@ -72,8 +68,6 @@ flowchart TD
 - pricecharting：`#used_price .price.js-price`
 - yuyutei：`h4.fw-bold.d-inline-block`
 
-
-
 ## 5. 註冊（唯一需碰的既有檔）
 
 [apps/api/src/adapters/registry.js](apps/api/src/adapters/registry.js)：import 4 個新 crawler adapter，加進 `adapters` 陣列即可，service / scheduler 不動。
@@ -83,11 +77,10 @@ flowchart TD
 1. 階段 0 可行性驗證：對 4 個候選來源做 `curl` 測試，確認 HTML 原始碼直接含價格文字或可解析的價格屬性（否則為 JS 動態渲染，需換來源或改 Playwright）。
 2. 實作 4 個 crawler adapter，import `assertPriceResult`；用 repo 內的測試 HTML（`crawler source test htmls/`）以 cheerio 驗證各 selector 抓得到值。
 3. 於 [apps/api/src/adapters/registry.js](apps/api/src/adapters/registry.js) 註冊 adapter。
-4. 階段 3：DB 建真實 `PriceSource`（4 筆 crawler），跑 `npm run job:once -w @pct/api -- <cardId>` 驗證快照落地。
+4. 階段 3：DB 建真實資料——**4 張卡牌，各掛 1 筆 crawler `PriceSource`**（來源 URL 對應不同商品頁，不可併到同一張卡），再跑抓價驗證快照落地。
   - 建資料：`npm run seed:real-sources`（腳本：[apps/api/src/scripts/seedRealSources.js](apps/api/src/scripts/seedRealSources.js)）
+  - 逐卡：`npm run job:once -w @pct/api -- <cardId>`；或一次全跑：`npm run job:once`
 5. 階段 4：跑錯誤情境 + 準備 mock 備援。
-
-
 
 ## 7. 錯誤處理驗收（對應 PRD 第十八章 / 成功指標）
 
@@ -97,34 +90,44 @@ flowchart TD
 - 空 / 0 / NaN / Infinity → 由 `normalizePrice` 擋下，不寫入快照。
 - Demo 備援：保留 mock adapter，來源當天掛掉仍能展示（PRD 第二十九章）。
 
-
-
 ## 8. 階段 3 整合驗收（已完成）
+
+`seed:real-sources` 會建立以下 4 組「卡牌 ↔ 來源」（各 1 對 1）：
+
+
+| provider      | 卡牌                         | 卡號      | setName       | language | currency |
+| ------------- | -------------------------- | ------- | ------------- | -------- | -------- |
+| cardLand      | 超級皮可西ex                    | 112/080 | 虛無歸零 M3       | zh       | HKD      |
+| yuyutei       | SR ヤドン＆コダックGX              | 095/094 | ミラクルツイン       | ja       | JPY      |
+| priceCharting | Pikachu with Grey Felt Hat | 085/S-P | Pokemon Promo | en       | USD      |
+| rakuten       | ニンフィア                      | 2-4-037 | ポケモンフレンダ      | ja       | JPY      |
+
 
 執行方式：
 
 ```bash
 npm run seed:real-sources
+# 腳本會印出 4 個 cardId；逐卡驗證：
 npm run job:once -w @pct/api -- <cardId>
+# 或一次抓全部啟用來源：
+npm run job:once
 ```
 
-驗證結果（2026-07-12）：
+驗證結果（每張卡各自 1 來源成功即可）：
 
-- 卡牌：`Pikachu with Grey Felt Hat`（`cmrgnki860000fhtocnqtbjfc`）
-- Job 狀態：`success`（4 / 4 來源成功）
-- 4 筆 `PriceSnapshot` 已落地
-- 4 筆 `PriceFetchLog` 皆為 `success`
-- `Card.latestPrice` 已更新
+- Job 狀態：逐卡跑時為 `success`（1 / 1）；全跑時依當下啟用來源數結算
+- 每張卡各 1 筆 `PriceSnapshot`、1 筆 `PriceFetchLog`（`success`）
+- 各卡 `Card.latestPrice` 已更新
+
+各來源曾驗證到的價格樣例（2026-07-12）：
 
 
 | provider      | rawText  | price | currency |
 | ------------- | -------- | ----- | -------- |
-| cardland      | $200     | 200   | HKD      |
+| cardLand      | $200     | 200   | HKD      |
 | yuyutei       | 17,800 円 | 17800 | JPY      |
-| pricecharting | $922.00  | 922   | USD      |
+| priceCharting | $922.00  | 922   | USD      |
 | rakuten       | 170      | 170   | JPY      |
-
-
 
 
 ## 9. 階段 4 自動化驗收（已完成）
@@ -152,8 +155,6 @@ npm test
 | 部分成功        | 5 來源中 1 成功 4 失敗                               | job = `partial_success`，僅 1 筆 snapshot    |
 | mock 備援     | provider 未知                                   | registry 退回 `mockCrawler`                 |
 
-
-修正：`cardland`、`pricecharting` adapter 的 `name` 已對齊 DB `PriceSource.provider` 小寫命名，避免誤走 mock fallback。
 
 ## 10. 不在本次範圍（加分項）
 
