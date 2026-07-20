@@ -1,5 +1,5 @@
-// 建立「真實 crawler 來源」的示範卡牌與 PriceSource（非破壞式，可重複執行）－ 對應開發規格書階段 3
-// 四個來源各自對應不同卡牌
+// 建立「真實抓價來源」的示範卡牌與 PriceSource（非破壞式，可重複執行）
+// 各來源各自對應不同卡牌（4 crawler + 1 api）
 // 執行：npm run seed:real-sources（從根目錄）
 import '@pct/shared/load-env';
 import { prisma } from '@pct/db';
@@ -63,6 +63,23 @@ const ENTRIES = [
       provider: 'rakuten',
       url: 'https://item.rakuten.co.jp/fullahead/pmf-09-071/',
       currency: 'JPY',
+    },
+  },
+  {
+    // Pokémon TCG API（adapter 註解範例卡）：https://api.pokemontcg.io/v2/cards/hgss4-1
+    card: {
+      name: 'Aggron',
+      cardNumber: '1/102',
+      setName: 'HS—Triumphant',
+      language: 'en',
+      condition: 'raw',
+    },
+    source: {
+      type: 'api',
+      provider: 'tcgdexApi',
+      url: 'https://api.pokemontcg.io/v2/cards/hgss4-1',
+      externalId: 'hgss4-1',
+      currency: 'EUR',
     },
   },
 ];
