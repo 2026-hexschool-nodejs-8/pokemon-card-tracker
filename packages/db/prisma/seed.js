@@ -85,7 +85,22 @@ async function main() {
     },
   });
 
-  console.log('✅ 建立 4 張卡牌（含 1 張高價、1 張尚未抓價）');
+  // 一張「已停用追蹤」的卡（測試停用卡公開 API 回 404）
+  await prisma.card.create({
+    data: {
+      name: 'フシギバナ EX',
+      cardNumber: '003/EX-P',
+      setName: 'EX Series',
+      language: 'ja',
+      condition: 'raw',
+      isActive: false,
+      sources: {
+        create: [{ type: 'api', provider: 'mockApi', externalId: 'bulbasaur-ex', currency: 'JPY' }],
+      },
+    },
+  });
+
+  console.log('✅ 建立 5 張卡牌（含 1 張高價、1 張尚未抓價、1 張已停用追蹤）');
 
   // ── 歷史快照（為前 3 張卡各灌幾筆，形成趨勢）──
   const seedSnapshots = [

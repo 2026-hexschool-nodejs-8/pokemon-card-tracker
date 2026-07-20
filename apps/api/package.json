@@ -7,7 +7,8 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "job:once": "node src/scripts/runJobOnce.js",
-    "test": "node --test"
+    "test": "node --test",
+    "currency:once": "node src/scripts/runCurrencySyncOnce.js"
   },
   "dependencies": {
     "@pct/db": "*",
