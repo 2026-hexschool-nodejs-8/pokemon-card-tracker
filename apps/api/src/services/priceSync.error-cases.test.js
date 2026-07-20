@@ -15,13 +15,13 @@ function installFetchMock() {
   globalThis.fetch = async (url) => {
     const value = String(url);
 
-    if (value.includes('/success')) {
+    if (value.includes('/success-alt-image')) {
       return {
         ok: true,
         status: 200,
         text: async () =>
-          `<table><tbody><tr><td id="used_price"><span class="price js-price">$948.43</span></td></tr></tbody></table>
-           <div id="product_details"><img itemprop="image" src="https://images.example.test/card-success.jpg" /></div>`,
+          `<table><tbody><tr><td id="used_price"><span class="price js-price">$10.00</span></td></tr></tbody></table>
+           <div id="product_details"><img itemprop="image" src="https://images.example.test/card-second.jpg" /></div>`,
       };
     }
 
@@ -31,6 +31,16 @@ function installFetchMock() {
         status: 200,
         text: async () =>
           '<table><tbody><tr><td id="used_price"><span class="price js-price">$12.34</span></td></tr></tbody></table>',
+      };
+    }
+
+    if (value.includes('/success')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          `<table><tbody><tr><td id="used_price"><span class="price js-price">$948.43</span></td></tr></tbody></table>
+           <div id="product_details"><img itemprop="image" src="https://images.example.test/card-success.jpg" /></div>`,
       };
     }
 
@@ -232,6 +242,67 @@ test('runPriceSync writes imageUrl only when card.imageUrl is empty', async (t) 
     const updatedCard = await prisma.card.findUnique({ where: { id: card.id } });
     assert.equal(updatedCard.imageUrl, existingImage);
     assert.equal(updatedCard.latestPrice, 948.43);
+  } finally {
+    restoreFetch();
+    if (job?.id) {
+      await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
+    }
+    if (card?.id) {
+      await prisma.card.delete({ where: { id: card.id } }).catch(() => {});
+    }
+  }
+});
+
+test('runPriceSync keeps first imageUrl when multiple sources succeed in one job', async (t) => {
+  if (!(await canReachDatabase())) {
+    t.skip('database is not reachable; start postgres and run migrations to execute this integration test');
+    return;
+  }
+
+  const runningJobs = await prisma.priceFetchJob.count({ where: { status: 'running' } });
+  if (runningJobs > 0) {
+    t.skip('a price fetch job is already running');
+    return;
+  }
+
+  const restoreFetch = installFetchMock();
+  let card;
+  let job;
+
+  try {
+    card = await prisma.card.create({
+      data: {
+        name: `Phase 4 Multi Image ${TEST_RUN_ID}`,
+        cardNumber: `${TEST_RUN_ID}-multiimg`,
+        setName: 'Phase 4',
+        language: 'ja',
+        condition: 'raw',
+        sources: {
+          create: [
+            {
+              type: 'crawler',
+              provider: 'priceCharting',
+              url: `https://example.test/${TEST_RUN_ID}/success`,
+              currency: 'USD',
+            },
+            {
+              type: 'crawler',
+              provider: 'priceCharting',
+              url: `https://example.test/${TEST_RUN_ID}/success-alt-image`,
+              currency: 'USD',
+            },
+          ],
+        },
+      },
+    });
+
+    job = await runPriceSync({ triggerType: 'manual', cardId: card.id });
+    assert.equal(job.status, 'success');
+    assert.equal(job.successCount, 2);
+
+    const updatedCard = await prisma.card.findUnique({ where: { id: card.id } });
+    assert.equal(updatedCard.imageUrl, 'https://images.example.test/card-success.jpg');
+    assert.equal(updatedCard.latestPrice, 10);
   } finally {
     restoreFetch();
     if (job?.id) {
