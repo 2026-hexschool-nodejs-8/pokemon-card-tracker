@@ -51,9 +51,9 @@ flowchart TD
 
 4 個檔案，各自對應一個來源：
 
-- [apps/api/src/adapters/crawler/cardland.adapter.js](apps/api/src/adapters/crawler/cardland.adapter.js)（`name: cardland`）
+- [apps/api/src/adapters/crawler/cardLand.adapter.js](apps/api/src/adapters/crawler/cardLand.adapter.js)（`name: cardLand`）
 - [apps/api/src/adapters/crawler/rakuten.adapter.js](apps/api/src/adapters/crawler/rakuten.adapter.js)（`name: rakuten`）
-- [apps/api/src/adapters/crawler/priceCharting.adapter.js](apps/api/src/adapters/crawler/priceCharting.adapter.js)（`name: pricecharting`）
+- [apps/api/src/adapters/crawler/priceCharting.adapter.js](apps/api/src/adapters/crawler/priceCharting.adapter.js)（`name: priceCharting`）
 - [apps/api/src/adapters/crawler/yuyutei.adapter.js](apps/api/src/adapters/crawler/yuyutei.adapter.js)（`name: yuyutei`）
 
 共同模板：
@@ -119,9 +119,9 @@ npm run job:once -w @pct/api -- <cardId>
 
 | provider      | rawText  | price | currency |
 | ------------- | -------- | ----- | -------- |
-| cardland      | $200     | 200   | HKD      |
+| cardLand      | $200     | 200   | HKD      |
 | yuyutei       | 17,800 円 | 17800 | JPY      |
-| pricecharting | $922.00  | 922   | USD      |
+| priceCharting | $922.00  | 922   | USD      |
 | rakuten       | 170      | 170   | JPY      |
 
 
@@ -153,7 +153,6 @@ npm test
 | mock 備援     | provider 未知                                   | registry 退回 `mockCrawler`                 |
 
 
-修正：`cardland`、`pricecharting` adapter 的 `name` 已對齊 DB `PriceSource.provider` 小寫命名，避免誤走 mock fallback。
 
 ## 10. 不在本次範圍（加分項）
 
