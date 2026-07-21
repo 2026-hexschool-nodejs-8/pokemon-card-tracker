@@ -22,6 +22,7 @@ src/
 - 主動丟錯用 `lib/httpError.js`（`notFound()` / `badRequest()` …）。
 - 新增價格來源：在 `adapters/` 寫一個實作 `{ type, name, fetchPrice(source) }` 的物件，
   到 `adapters/registry.js` 註冊。**不要把 HTML / API 解析細節漏到 service**。
+- `PriceResult` 可選帶 `imageUrl`（同次抓取）；缺圖不 throw。service 僅在 `Card.imageUrl` 為空時寫入。
 - 真實來源接法：把 mock adapter 內的 `simulateXxx` 換成 `fetch(source.url)` + 解析即可，輸出格式不變。
 
 ## 抓價主流程

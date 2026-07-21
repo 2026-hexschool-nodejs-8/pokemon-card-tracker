@@ -10,6 +10,7 @@
 //     rawText?: string,      // 原始價格文字，例如 "¥12,345"（crawler 來源常見）
 //     currency: string,      // 幣別
 //     fetchedAt: string,     // ISO 時間字串
+//     imageUrl?: string,     // 可選；同次抓取得到的卡圖 URL（缺圖不 throw）
 //   }
 
 export function assertPriceResult(result) {
@@ -21,6 +22,9 @@ export function assertPriceResult(result) {
   }
   if (!result.currency) {
     throw new Error('adapter 回傳缺少 currency');
+  }
+  if (typeof result.imageUrl === 'string' && !result.imageUrl.trim()) {
+    delete result.imageUrl;
   }
   return result;
 }
