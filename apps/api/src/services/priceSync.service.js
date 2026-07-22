@@ -107,8 +107,11 @@ async function processOneSource(jobId, source, ratesToTwd) {
     logger.warn(`來源 ${source.provider}(${source.id}) 台幣換算失敗：${twdReason}`);
   }
 
-  await prisma.$transaction([
-    prisma.priceSnapshot.create({
+  const imageUrl = typeof result.imageUrl === 'string' ? result.imageUrl.trim() : '';
+  const isValidImage = /^https?:\/\//i.test(imageUrl);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.priceSnapshot.create({
       data: {
         cardId: source.cardId,
         sourceId: source.id,
@@ -120,16 +123,46 @@ async function processOneSource(jobId, source, ratesToTwd) {
         fetchedAt: new Date(result.fetchedAt || Date.now()),
         isSuspicious,
       },
-    }),
-    prisma.card.update({
+    });
+
+    // 價格摘要一律更新；圖片用條件更新，避免同 job 多來源覆寫
+    await tx.card.update({
       where: { id: source.cardId },
-      data: { latestPrice: price, latestCurrency: currency, latestPriceTwd: priceTwd, lastFetchedAt: new Date() },
-    }),
-    prisma.priceSource.update({
+      data: {
+        latestPrice: price,
+        latestCurrency: currency,
+        latestPriceTwd: priceTwd,
+        lastFetchedAt: new Date(),
+      },
+    });
+
+    if (isValidImage) {
+      const filled = await tx.card.updateMany({
+        where: {
+          id: source.cardId,
+          OR: [{ imageUrl: null }, { imageUrl: '' }],
+        },
+        data: { imageUrl },
+      });
+      if (filled.count > 0) {
+        logger.info(`Card ${source.cardId} 寫入 imageUrl（來源 ${source.provider}）`);
+      }
+    } else {
+      const card = await tx.card.findUnique({
+        where: { id: source.cardId },
+        select: { imageUrl: true },
+      });
+      if (!card?.imageUrl) {
+        logger.warn(`Card ${source.cardId} 缺 imageUrl（來源 ${source.provider}）`);
+      }
+    }
+
+    await tx.priceSource.update({
       where: { id: source.id },
       data: { lastSuccessAt: new Date(), lastError: null },
-    }),
-    prisma.priceFetchLog.create({
+    });
+
+    await tx.priceFetchLog.create({
       data: {
         jobId,
         cardId: source.cardId,
@@ -141,8 +174,8 @@ async function processOneSource(jobId, source, ratesToTwd) {
           (priceTwd === null ? `（台幣換算失敗：${twdReason}）` : ` ≈ TWD ${priceTwd}`),
         durationMs: Date.now() - startedAt,
       },
-    }),
-  ]);
+    });
+  });
 }
 
 // ── 單一來源失敗：記錄錯誤，不中斷整個 job ──
