@@ -69,7 +69,16 @@ export default function CardListPage() {
                   <span className="text-muted-foreground">語言 / 品相：</span>
                   {c.language} / {c.condition}
                 </p>
-                <p className="text-lg font-semibold">{fmtPrice(c.latestPrice, c.latestCurrency)}</p>
+                {c.latestPriceTwd != null ? (
+                  <>
+                    <p className="text-lg font-semibold">NT$ {c.latestPriceTwd.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">
+                      原幣 {fmtPrice(c.latestPrice, c.latestCurrency)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-lg font-semibold">{fmtPrice(c.latestPrice, c.latestCurrency)}</p>
+                )}
                 <p className="text-xs text-muted-foreground">更新：{fmtTime(c.lastFetchedAt)}</p>
               </CardContent>
             </Card>
