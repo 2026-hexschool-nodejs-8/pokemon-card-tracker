@@ -4,13 +4,13 @@
 //   → 清洗標準化 → 寫入 snapshot → 更新 card 摘要 → 寫 log → 結算 job 狀態
 //
 // 單一來源失敗不影響其他來源（PRD FR-14）。
-import { convertToTwd } from '../lib/convertToTwd.js';
 import { prisma } from '@pct/db';
 import { JOB_STATUS, LOG_STATUS } from '@pct/shared';
 import { normalizePrice, isSuspiciousPrice } from '../lib/normalizePrice.js';
 import { getAdapter } from '../adapters/registry.js';
 import { withTimeout } from '../lib/timeout.js';
 import { logger } from '../lib/logger.js';
+import { convertToTwd } from '../lib/convertToTwd.js';
 import { conflict } from '../lib/httpError.js';
 
 const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 10000;
