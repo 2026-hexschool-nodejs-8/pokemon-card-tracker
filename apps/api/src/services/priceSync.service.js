@@ -99,13 +99,17 @@ async function processOneSource(jobId, source, ratesToTwd) {
   // 統一清洗（擋 0 / NaN / Infinity，清掉貨幣符號與逗號）
   const price = normalizePrice(result.rawText ?? result.price);
   const currency = result.currency || source.currency;
-  const isSuspicious = isSuspiciousPrice(price, source.card.latestPrice);
 
   // 換算台幣（失敗回 null + reason，不中斷 job）
   const { priceTwd, reason: twdReason } = convertToTwd(price, currency, ratesToTwd);
   if (priceTwd === null) {
     logger.warn(`來源 ${source.provider}(${source.id}) 台幣換算失敗：${twdReason}`);
   }
+
+  // 異常判斷改用台幣比較：多來源幣別不同時，原幣價 vs latestPrice 會比到不同幣別
+  // 換算失敗（priceTwd 為 null）就不判斷，避免 null 被當 0 誤判成暴跌
+  const isSuspicious =
+    priceTwd !== null && isSuspiciousPrice(priceTwd, source.card.latestPriceTwd);
 
   const imageUrl = typeof result.imageUrl === 'string' ? result.imageUrl.trim() : '';
   const isValidImage = /^https?:\/\//i.test(imageUrl);
