@@ -23,9 +23,19 @@ export const listCardsQuerySchema = z.object({
 });
 
 // 後台列表查詢參數（多一個 isActive 篩選，不帶時回傳全部）
+// 新增 cursor / limit 供無限滾動 cursor 分頁（回應為加法式新增 nextCursor）
 export const adminListCardsQuerySchema = listCardsQuerySchema.extend({
   isActive: z
     .enum(['true', 'false'])
     .transform((v) => v === 'true')
     .optional(),
+  // 上一批最後一張卡的 id（cuid）；不帶=從第一批
+  cursor: z.string().cuid().optional(),
+  // 單批數量：字串轉正整數、預設 20、上限 50（超過即夾為 50）
+  limit: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(20)
+    .transform((n) => Math.min(n, 50)),
 });
