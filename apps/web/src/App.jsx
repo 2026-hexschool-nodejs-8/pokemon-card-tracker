@@ -3,11 +3,15 @@ import CardListPage from './pages/CardListPage.jsx';
 import CardDetailPage from './pages/CardDetailPage.jsx';
 import LoginPage from './pages/admin/LoginPage.jsx';
 import AdminPage from './pages/admin/AdminPage.jsx';
+import AdminOverviewPage from './pages/admin/AdminOverviewPage.jsx';
+import { isLoggedIn } from './lib/auth.js';
 
 export default function App() {
   // 每次點擊導覽連結（含同路徑）location.key 都會更新，
   // 用它當 key 讓 CardListPage 重新掛載，清空搜尋狀態回到初始畫面
   const location = useLocation();
+  // 登入 / 登出都會 navigate → location 變動 → 這裡重算，據此顯示僅管理者可見的導覽鍵
+  const loggedIn = isLoggedIn();
 
   return (
     <div className="min-h-screen bg-background">
@@ -23,6 +27,11 @@ export default function App() {
             <Link to="/admin" className="hover:underline">
               後台管理
             </Link>
+            {loggedIn && (
+              <Link to="/admin/overview" className="hover:underline">
+                卡片總覽
+              </Link>
+            )}
           </nav>
         </div>
       </header>
@@ -33,6 +42,7 @@ export default function App() {
           <Route path="/cards/:id" element={<CardDetailPage />} />
           <Route path="/admin/login" element={<LoginPage />} />
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/admin/overview" element={<AdminOverviewPage />} />
         </Routes>
       </main>
     </div>
