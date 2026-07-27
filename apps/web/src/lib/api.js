@@ -56,3 +56,34 @@ export const adminSyncAll = () =>
   request('/admin/jobs/price-sync', { method: 'POST', auth: true });
 
 export const adminGetJobs = () => request('/admin/jobs', { auth: true });
+
+// ── 後台總覽頁（卡片與來源管理）──
+// 卡片清單（cursor 分頁，供無限滾動）；回傳 { data, nextCursor }
+export const adminGetCards = ({ cursor, limit, keyword, language, grade, isActive } = {}) => {
+  const params = {};
+  if (cursor) params.cursor = cursor;
+  if (limit) params.limit = limit;
+  if (keyword) params.keyword = keyword;
+  if (language) params.language = language;
+  if (grade) params.grade = grade;
+  // isActive 僅在 'true' / 'false' 時帶入（空字串=全部，不帶）
+  if (isActive === 'true' || isActive === 'false') params.isActive = isActive;
+  const qs = new URLSearchParams(params).toString();
+  return request(`/admin/cards${qs ? `?${qs}` : ''}`, { auth: true });
+};
+
+// 某卡全部來源（延遲載入）；回傳 { data }
+export const adminGetCardSources = (cardId) =>
+  request(`/admin/cards/${cardId}/sources`, { auth: true });
+
+// 切換卡片「追蹤」開關
+export const adminToggleCard = (id, isActive) =>
+  request(`/admin/cards/${id}`, { method: 'PATCH', body: { isActive }, auth: true });
+
+// 切換來源「使用」開關（非最後啟用來源，或重新啟用）
+export const adminToggleSource = (id, isActive) =>
+  request(`/admin/sources/${id}`, { method: 'PATCH', body: { isActive }, auth: true });
+
+// 關閉「最後一個啟用來源」（交易連動停用來源 + 卡片）
+export const adminDeactivateLastSource = (id) =>
+  request(`/admin/sources/${id}/deactivate-last`, { method: 'PATCH', auth: true });
