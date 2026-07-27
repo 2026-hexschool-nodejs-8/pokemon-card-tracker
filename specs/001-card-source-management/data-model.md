@@ -57,12 +57,12 @@ Card (1) ──< (N) PriceSource        // 一張卡多個來源；一個來源�
 ```
 
 - **是否會被抓取** = `PriceSource.isActive === true` **且** 其 `Card.isActive === true`（兩者同時成立）。任一為 false 即被排除。此為既有抓價 job 挑選語意，本頁**不修改**（FR-014），僅在 UI 明確標示：當 `Card.isActive === false` 時，其下即使 `PriceSource.isActive === true` 的來源也「不會被抓取」（FR-008）。
-- **「最後一個啟用來源」判定**：對某卡當前已載入的來源清單中，`isActive === true` 的數量為 1，且被關閉者即該來源時成立（FR-015；由前端就已呈現清單判定，不新增反查查詢）。
+- **「最後一個啟用來源」判定**：對某卡當前已載入的來源清單中，`isActive === true` 的數量為 1，且被關閉者即該來源時成立（FR-015；由前端就已呈現清單判定，不新增反查查詢）。後端 `deactivate-last` 於交易內亦以同一定義計數該卡啟用來源作為防呆守衛，不成立則回 `409`（FR-016）。
 
 ## 新增的查詢/操作語意（非資料結構）
 
 1. **卡片分頁查詢（cursor）**：`GET /admin/cards` 以 `cursor`(card id) + `limit`(預設 20) 分批，回應附 `nextCursor`（無更多為 `null`）。排序 `updatedAt desc`，cursor 以 `id` 定位。
-2. **交易連動**：`deactivate-last` 於單一 `prisma.$transaction` 內更新 source 與其 card 的 `isActive`，保證原子（FR-016）。
+2. **交易連動**：`deactivate-last` 於單一 `prisma.$transaction` 內**先防呆守衛**（計數該卡 `isActive=true` 來源，須恰為 1），再更新 source 與其 card 的 `isActive`，保證原子；守衛不成立則整筆不變更並回 `409`（FR-016）。
 
 ## 驗證規則（`packages/shared`，Principle II）
 

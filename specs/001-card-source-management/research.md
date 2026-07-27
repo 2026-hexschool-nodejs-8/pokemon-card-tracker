@@ -31,7 +31,7 @@
 
 ## 5. 「關閉最後一個啟用來源 → 卡片連動不追蹤」的原子性
 
-- **Decision**：新增交易式端點 `PATCH /admin/sources/:id/deactivate-last`，在 `prisma.$transaction` 內同時 `source.isActive=false` 與其所屬 `card.isActive=false`，回傳更新後的 source 與 card。前端在偵測到「這是該卡最後一個啟用來源」時先跳確認 modal，確認後才呼叫此端點；一般（非最後）來源關閉走既有 `PATCH /admin/sources/:id`。
+- **Decision**：新增交易式端點 `PATCH /admin/sources/:id/deactivate-last`，在 `prisma.$transaction` 內**先計數該卡啟用來源作為防呆守衛**（僅當此來源為該卡唯一啟用來源才續行，否則整筆不變更並回 `409`），續行則同時 `source.isActive=false` 與其所屬 `card.isActive=false`，回傳更新後的 source 與 card。前端在偵測到「這是該卡最後一個啟用來源」時先跳確認 modal，確認後才呼叫此端點；一般（非最後）來源關閉走既有 `PATCH /admin/sources/:id`。
 - **Rationale**：FR-016 要求「同一動作內同時停用來源並將卡片設為不追蹤、兩者一併持久化」，必須後端交易保證原子性，前端兩次呼叫無法保證。分成獨立端點可讓既有 `PATCH /admin/sources/:id` 行為完全不變（Principle I）。「是否為最後啟用來源」由該卡已呈現的來源清單於前端判定（Clarifications 明訂，一來源只屬一卡，不新增反查查詢）。
 - **Alternatives considered**：
   - 擴充 `PATCH /admin/sources/:id` 吃一個 `cascadeDeactivateCard` 旗標——會改動既有端點語意與 `updateSourceSchema`（共用 schema），牽動較廣，捨棄。
@@ -55,7 +55,7 @@
 ## 8. 卡片摘要欄位來源（FR-002）
 
 - **Decision**：`GET /admin/cards` 回傳的每張卡直接提供 `name`／`cardNumber`／`setName`（系列）／`language`／`condition`（狀態別）／`isActive`（追蹤開關）／`latestPrice`＋`latestCurrency`（最新價）／`lastFetchedAt`（最後更新時間），並沿用既有 `include: { _count: { select: { sources: true } } }` 提供**來源數量**。
-- **Rationale**：這些欄位皆為 `Card` 既有欄位或既有 `_count`，**無需 schema 變更**。摘要顯示的來源數量定義為該卡全部來源數（含停用）；若需求為「啟用中來源數」可於 Phase 1 contract 明確化。
+- **Rationale**：這些欄位皆為 `Card` 既有欄位或既有 `_count`，**無需 schema 變更**。摘要顯示的來源數量**定義為該卡全部來源數（含停用）**（已定調，見 spec Assumptions）；卡片全部來源關閉時其追蹤亦為 off，故不另計「啟用中來源數」。
 - **空值處理**：`latestPrice`／`lastFetchedAt` 為 null（從未抓價）時前端顯示「—」（Edge Case）。
 
 ## 9. 存取控制

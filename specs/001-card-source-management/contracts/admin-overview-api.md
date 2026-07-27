@@ -45,6 +45,7 @@
 ```
 
 - 排序：`updatedAt desc`（預設檢視順序）。
+- `_count.sources` 為該卡**全部來源數（含停用）**（既有 `include` 提供；計數口徑見 spec Assumptions）。
 - `latestPrice` / `lastFetchedAt` 可能為 `null`（從未抓價）→ 前端顯示「—」。
 - 篩選條件變更時，前端不帶 `cursor` 重新請求（自第一批重載，FR-011）。
 
@@ -134,9 +135,11 @@
 - 前置條件由**前端**依該卡已呈現的來源清單判定「這是最後一個啟用來源」；後端專注於原子執行連動。
 
 ### 行為
-在交易內：
-1. `PriceSource.update({ where:{id}, data:{ isActive:false } })`
-2. `Card.update({ where:{ id: source.cardId }, data:{ isActive:false } })`
+在交易內（先防呆守衛，再連動）：
+1. 查出該來源（含 `cardId`、`isActive`）；來源不存在 → `404`。
+2. **防呆守衛**：計數該卡 `isActive=true` 的來源數。僅當「該來源當前為啟用中，且該卡啟用來源數恰為 1（即此來源為唯一啟用來源）」時才續行；否則整筆不變更、回 `409`（前端據此重抓來源清單並沿用 FR-012 還原）。
+3. `PriceSource.update({ where:{id}, data:{ isActive:false } })`
+4. `Card.update({ where:{ id: source.cardId }, data:{ isActive:false } })`
 
 ### 200 回應
 ```json
@@ -150,10 +153,12 @@
 
 ### 錯誤
 - 來源不存在 → `404`。
+- 該來源並非其卡片「最後一個啟用中來源」（併發下已另有啟用來源，或該來源已停用）→ `409`；整筆不變更，前端重抓來源清單並沿用 FR-012 還原。
 - 交易任一步失敗 → 整筆 rollback（來源與卡片皆不變），回 5xx；前端一併還原來源與卡片開關並提示（FR-016 / FR-012）。
 
 ### 契約測試要點
 - 對「僅剩一個啟用來源」的卡呼叫後：該來源 `isActive=false` 且其卡 `isActive=false`，重新查詢兩者一致（SC-008）。
+- **防呆守衛**：對「仍有 ≥2 個啟用來源」的卡呼叫 → 回 `409`，來源與卡片 `isActive` 皆不變。
 - 交易失敗情境（模擬 card.update 拋錯）：來源 `isActive` 維持原值（rollback 驗證）。
 - 單向性：之後對同卡任一來源 `PATCH { isActive:true }`，卡片 `isActive` 仍為 false（FR-018）。
 
