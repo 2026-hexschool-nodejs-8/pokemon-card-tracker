@@ -1,5 +1,6 @@
 // 卡片摘要列：夾在 AccordionItem 內，左側為可展開的 Trigger（摘要），右側為「追蹤」開關。
 // 開關刻意放在 Trigger 之外（避免 button 巢狀且點開關不會展開 Accordion）。
+// 追蹤開關在請求進行中鎖 disabled（toggleBusy），從源頭擋掉連點造成的並行請求。
 // 對齊策略：操作區固定寬度 + 摘要用固定比例 grid + 每欄 min-w-0/truncate，
 // 讓每一列的欄位、箭頭都對齊（trigger 寬度固定 → 各欄寬度一致）。
 import { AccordionTrigger } from '@/components/ui/accordion';
@@ -60,8 +61,8 @@ export default function CardRow({ card, onToggleTrack, toggleBusy }) {
           type="button"
           size="sm"
           variant={card.isActive ? 'outline' : 'default'}
-          disabled={toggleBusy}
           onClick={onToggleTrack}
+          disabled={toggleBusy}
           className="w-24 shrink-0"
         >
           {card.isActive ? '關閉追蹤' : '開啟追蹤'}
