@@ -66,6 +66,10 @@ model Card {
   latestPriceTwd Float? // 最新台幣價，供前台列表直接顯示（換算失敗為 null）
   lastFetchedAt  DateTime?
 
+  // 多來源平均價：保留原本 latestPrice 行為，另外提供後端聚合後的台幣均價
+  averagePriceTwd         Float?
+  averagePriceSourceCount Int    @default(0)
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
