@@ -39,7 +39,7 @@ export default function CardDetailPage() {
     date: new Date(p.fetchedAt).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }),
     priceTwd: p.priceTwd, // 舊快照可能是 null，connectNulls 會跨過缺值
   }));
-  const hasTwd = chartData.some((d) => d.priceTwd != null);
+  const hasTwd = chartData.some((d) => d.priceTwd !== null);
 
   return (
     <div className="space-y-6">
@@ -55,7 +55,7 @@ export default function CardDetailPage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-1">
-          {card.latestPriceTwd != null ? (
+          {card.latestPriceTwd !== null ? (
             <>
               <p className="text-3xl font-bold">NT$ {card.latestPriceTwd.toLocaleString()}</p>
               <p className="text-sm text-muted-foreground">
@@ -64,7 +64,7 @@ export default function CardDetailPage() {
             </>
           ) : (
             <p className="text-3xl font-bold">
-              {card.latestPrice == null
+              {card.latestPrice === null
                 ? '尚未更新價格'
                 : `${card.latestCurrency} ${card.latestPrice.toLocaleString()}`}
             </p>
@@ -118,7 +118,7 @@ export default function CardDetailPage() {
                     {p.currency} {p.price.toLocaleString()}
                     {p.isSuspicious && <span className="ml-1 text-destructive">⚠</span>}
                   </td>
-                  <td>{p.priceTwd != null ? `NT$ ${p.priceTwd.toLocaleString()}` : '—'}</td>
+                  <td>{p.priceTwd !== null ? `NT$ ${p.priceTwd.toLocaleString()}` : '—'}</td>
                   <td className="text-muted-foreground">{p.rawText}</td>
                 </tr>
               ))}

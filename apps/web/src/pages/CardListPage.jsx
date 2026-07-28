@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-const fmtPrice = (p, c) => (p == null ? '尚未更新' : `${c ?? ''} ${p.toLocaleString()}`);
+const fmtPrice = (p, c) => (p === null ? '尚未更新' : `${c ?? ''} ${p.toLocaleString()}`);
 const fmtTime = (t) => (t ? new Date(t).toLocaleString('zh-TW') : '—');
 
 export default function CardListPage() {
@@ -69,7 +69,7 @@ export default function CardListPage() {
                   <span className="text-muted-foreground">語言 / 品相：</span>
                   {c.language} / {c.condition}
                 </p>
-                {c.latestPriceTwd != null ? (
+                {c.latestPriceTwd !== null ? (
                   <>
                     <p className="text-lg font-semibold">NT$ {c.latestPriceTwd.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground">
