@@ -99,11 +99,15 @@ Job xxx 結束：success（成功 N / 失敗 0）
 | GET | `/cards/:id` | 公開 | 卡牌詳情 |
 | GET | `/cards/:id/prices` | 公開 | 歷史價格 |
 | POST | `/admin/auth/login` | 公開 | 管理者登入取得 JWT |
+| GET | `/admin/cards` | 管理者 | 後台卡牌列表（含停用）。**預設分頁**：`cursor`＋`limit`（預設 20、上限 50），回 `{ data, nextCursor }`（到底為 `null`）；排序 `createdAt desc` |
 | POST | `/admin/cards` | 管理者 | 新增卡牌 |
 | PATCH | `/admin/cards/:id` | 管理者 | 編輯卡牌 |
 | DELETE | `/admin/cards/:id` | 管理者 | 停用卡牌 |
 | POST | `/admin/cards/:id/sources` | 管理者 | 新增來源 |
-| PATCH | `/admin/sources/:id` | 管理者 | 編輯來源 |
+| GET | `/admin/cards/:id/sources` | 管理者 | 某張卡的全部來源（含停用）|
+| PATCH | `/admin/sources/:id` | 管理者 | 編輯來源。關掉「最後一個啟用來源」會回 `409`，須改走下一列 |
+| PATCH | `/admin/sources/:id/deactivate-last` | 管理者 | 關閉最後一個啟用來源：同一交易內連動停用來源與卡片；守衛不成立回 `409` |
+| DELETE | `/admin/sources/:id` | 管理者 | 停用來源（soft delete）|
 | POST | `/admin/jobs/price-sync` | 管理者 | 手動更新全部 |
 | POST | `/admin/cards/:id/price-sync` | 管理者 | 手動更新單張 |
 | GET | `/admin/jobs` | 管理者 | job 列表 |
