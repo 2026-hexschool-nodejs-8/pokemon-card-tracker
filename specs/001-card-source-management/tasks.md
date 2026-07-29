@@ -8,7 +8,8 @@ description: "Task list for 後台卡片與來源管理總覽頁"
 
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/admin-overview-api.md, quickstart.md
 
-**Tests**: 後端 `node:test` 契約測試（分頁與交易連動端點）已於 plan/quickstart/contracts 明確要求，故納入。前端以 `quickstart.md` 手動情境驗收，不產生自動化前端測試任務。
+**Tests**: 本 feature 不產生自動化測試任務，前後端一律以 `quickstart.md` 的手動情境驗收。
+（原訂納入後端 `node:test` 契約測試，實作後評估投入產出不成比例，已移除相關任務與測試檔。）
 
 **Organization**: 依 User Story 分組，每個 story 可獨立實作與驗收。
 
@@ -58,7 +59,6 @@ description: "Task list for 後台卡片與來源管理總覽頁"
 
 - [X] T004 [P] [US1] 擴充 `adminListCardsQuerySchema`：新增 `cursor`（string cuid, optional）與 `limit`（字串轉正整數、預設 20、上限 50），既有 `keyword`/`language`/`grade`/`isActive` 不變，於 `packages/shared/schemas/card.schema.js`（data-model 驗證規則、contract Query 參數）
 - [X] T005 [US1] 為 `GET /admin/cards` 加 cursor 分頁於 `apps/api/src/routes/admin.cards.js`：解析新 query，Prisma `take: limit` + `cursor: { id: cursor }` + `skip: 1`（有帶 cursor 時）、`orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]`、沿用 `include: { _count: { select: { sources: true } } }`，回應改為加法式 `{ data, nextCursor }`（最後一批 `nextCursor: null`）（research §1、contract）（相依 T004）
-- [X] T006 [P] [US1] 契約測試 `GET /admin/cards` 分頁於 `apps/api/src/routes/admin.cards.pagination.test.js`（`node:test`）：`limit=20` 且資料 > 20 時 `data.length===20` 且 `nextCursor` 非 null、以回傳 cursor 接續不重複不遺漏、最後一批 `nextCursor===null`、`isActive=false` 只回停用卡、`keyword` 同時比對卡名與卡號（contract 契約測試要點）
 
 ### Frontend
 
@@ -80,7 +80,6 @@ description: "Task list for 後台卡片與來源管理總覽頁"
 ### Backend
 
 - [X] T011 [US2] 新增交易端點 `PATCH /admin/sources/:id/deactivate-last` 於 `apps/api/src/routes/admin.cards.js`：於單一 `prisma.$transaction` 內**先防呆守衛**——查該來源（不存在回 `404`）並計數所屬卡 `isActive=true` 的來源數，僅當「該來源當前啟用且該卡啟用來源數為 1」才續行，否則整筆不變更、回 `409`；續行則 `priceSource.update({ isActive:false })` 再 `card.update({ where:{ id: source.cardId }, data:{ isActive:false } })`，回應 `{ data: { source, card } }`（FR-015/FR-016、research §5、contract）
-- [X] T012 [P] [US2] 契約測試 deactivate-last 於 `apps/api/src/routes/admin.sources.deactivate-last.test.js`（`node:test`）：僅剩一啟用來源的卡呼叫後來源與卡片皆 `isActive=false` 且重查一致（SC-008）、模擬 card.update 拋錯時整筆 rollback（來源 `isActive` 維持原值）、單向性——之後對同卡任一來源 `PATCH { isActive:true }` 卡片仍 `isActive=false`（FR-018）、**防呆守衛——對仍有 ≥2 個啟用來源的卡呼叫回 `409` 且來源與卡片 `isActive` 皆不變**
 
 ### Frontend
 
@@ -108,7 +107,6 @@ description: "Task list for 後台卡片與來源管理總覽頁"
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [X] T019 [P] 執行後端測試套件驗證分頁與交易端點：自 repo 根目錄 `npm test -w @pct/api`，確認 T006 / T012 契約測試通過
 - [ ] T020 依 `specs/001-card-source-management/quickstart.md` 逐項手動驗收情境 A（檢視）/ B（兩層開關）/ C（篩選）/ D（存取控制），對照 SC-001～SC-008
 - [X] T021 [P] Constitution 符合性複查：確認 `GET /admin/cards` 為加法式擴充未破壞既有消費者、無 Prisma migration、`adapters/` 與 `normalizePrice` 未更動、抓價 job 挑選邏輯未改（FR-014、plan Constitution Check）
 
@@ -132,16 +130,16 @@ description: "Task list for 後台卡片與來源管理總覽頁"
 
 ### Within Each User Story
 
-- 共用 schema → 後端 route → 契約測試
+- 共用 schema → 後端 route
 - `lib/api.js` 封裝 → UI 子元件 → `AdminOverviewPage` 組裝
 - 同一檔案的任務不可平行
 
 ### Parallel Opportunities
 
 - **Phase 1**: T001 可獨立進行
-- **US1 後端**: T004（schema）完成後 T005（route）；T006 測試為獨立檔案可平行撰寫
+- **US1 後端**: T004（schema）完成後 T005（route）
 - **US1 前端**: T007（api.js）/ T008（CardRow）/ T009（SourceList）三個不同檔案可平行，之後 T010 組裝
-- **US2**: T012（測試）/ T013（api.js）/ T014（ConfirmModal）為不同檔案可平行；T015、T016 皆改 `AdminOverviewPage.jsx`，需序列
+- **US2**: T013（api.js）/ T014（ConfirmModal）為不同檔案可平行；T015、T016 皆改 `AdminOverviewPage.jsx`，需序列
 - **US3**: T017（AdminOverviewPage）與 T018（SourceList）為不同檔案可平行
 - **跨 story 注意**: US1 與 US2 都會改 `apps/web/src/lib/api.js`、`CardRow.jsx`、`SourceList.jsx`、`AdminOverviewPage.jsx`，若不同人平行需協調合併
 
@@ -155,9 +153,8 @@ Task: "adminGetCards / adminGetCardSources in apps/web/src/lib/api.js"          
 Task: "CardRow 摘要列 in apps/web/src/pages/admin/components/CardRow.jsx"        # T008
 Task: "SourceList 來源明細 in apps/web/src/pages/admin/components/SourceList.jsx" # T009
 
-# 後端 route 與其契約測試（不同檔案）可並行推進：
+# 後端 route 可與上述前端檔案並行推進：
 Task: "GET /admin/cards cursor 分頁 in apps/api/src/routes/admin.cards.js"       # T005
-Task: "分頁契約測試 in apps/api/src/routes/admin.cards.pagination.test.js"        # T006
 ```
 
 ---
