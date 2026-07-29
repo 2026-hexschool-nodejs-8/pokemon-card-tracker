@@ -132,13 +132,9 @@ export default function AdminOverviewPage() {
           isActive: filters.isActive || undefined,
         });
         if (myId !== reqSeq.current) return; // 條件已變，丟棄
-        // 以 id 去重：排序鍵 updatedAt 會被本頁的開關操作改寫（Prisma @updatedAt），
-        // 被改的卡會跳到排序最前，後續批次因而可能重送已載入的卡片。
-        // 重複的 id 會讓 AccordionItem value 撞號（展開一列連動另一列、來源快取對不上）
-        setCards((prev) => {
-          const seen = new Set(prev.map((c) => c.id));
-          return [...prev, ...data.filter((c) => !seen.has(c.id))];
-        });
+        // 後端以 createdAt（建立後不再變動）排序，游標不會被開關操作或抓價 job 弄錯位，
+        // 所以這裡直接接續即可，不需要去重
+        setCards((prev) => [...prev, ...data]);
         setNextCursor(nc);
       } catch (e) {
         if (myId === reqSeq.current) setError(e.message);
@@ -187,6 +183,7 @@ export default function AdminOverviewPage() {
   // ── 卡片「追蹤」開關：樂觀更新 + 失敗還原（FR-006/FR-012）──
   async function handleToggleCard(card) {
     const target = !card.isActive;
+    setError('');
     markBusy(setBusyCards, card.id, true);
     setCards((prev) => prev.map((c) => (c.id === card.id ? { ...c, isActive: target } : c)));
     try {
@@ -230,6 +227,7 @@ export default function AdminOverviewPage() {
 
     // 一般切換（含來源重新啟用）：不動卡片
     const target = !source.isActive;
+    setError('');
     markBusy(setBusySources, source.id, true);
     setSourceActive(card.id, source.id, target);
     try {
@@ -246,6 +244,7 @@ export default function AdminOverviewPage() {
   async function handleConfirmDeactivate() {
     if (!confirm) return;
     const { card, source } = confirm;
+    setError('');
     setConfirmBusy(true);
     // 樂觀：來源與卡片一起停用
     setSourceActive(card.id, source.id, false);
