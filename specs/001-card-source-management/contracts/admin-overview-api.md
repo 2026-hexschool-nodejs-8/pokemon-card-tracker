@@ -44,7 +44,8 @@
 }
 ```
 
-- 排序：`updatedAt desc`（預設檢視順序）。
+- 排序：`createdAt desc, id desc`（預設檢視順序）。排序鍵必須是建立後不再變動的欄位——
+  `updatedAt` 會被追蹤開關與抓價 job 改寫，游標會因此錯位而重複或遺漏卡片。
 - `_count.sources` 為該卡**全部來源數（含停用）**（既有 `include` 提供；計數口徑見 spec Assumptions）。
 - `latestPrice` / `lastFetchedAt` 可能為 `null`（從未抓價）→ 前端顯示「—」。
 - 篩選條件變更時，前端不帶 `cursor` 重新請求（自第一批重載，FR-011）。

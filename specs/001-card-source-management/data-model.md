@@ -18,7 +18,7 @@
 | `latestPrice` | Float? | 摘要列：最新價（null → 顯示「—」） | FR-002 |
 | `latestCurrency` | String? | 摘要列：最新價幣別 | FR-002 |
 | `lastFetchedAt` | DateTime? | 摘要列：最後更新時間（null → 顯示「—」） | FR-002 |
-| `updatedAt` | DateTime | 清單預設排序鍵（新→舊） | Assumptions（預設排序） |
+| `createdAt` | DateTime | 清單預設排序鍵（新→舊），建立後不再變動 | Assumptions（預設排序） |
 | `_count.sources` | （聚合） | 摘要列：來源數量（既有 `include` 提供） | FR-002 |
 
 **衍生/計算值（非欄位）**：
@@ -61,7 +61,7 @@ Card (1) ──< (N) PriceSource        // 一張卡多個來源；一個來源�
 
 ## 新增的查詢/操作語意（非資料結構）
 
-1. **卡片分頁查詢（cursor）**：`GET /admin/cards` 以 `cursor`(card id) + `limit`(預設 20) 分批，回應附 `nextCursor`（無更多為 `null`）。排序 `updatedAt desc`，cursor 以 `id` 定位。
+1. **卡片分頁查詢（cursor）**：`GET /admin/cards` 以 `cursor`(card id) + `limit`(預設 20) 分批，回應附 `nextCursor`（無更多為 `null`）。排序 `createdAt desc, id desc`，cursor 以 `id` 定位。排序鍵不可用 `updatedAt`（會被改寫 → 游標錯位）。
 2. **交易連動**：`deactivate-last` 於單一 `prisma.$transaction` 內**先防呆守衛**（計數該卡 `isActive=true` 來源，須恰為 1），再更新 source 與其 card 的 `isActive`，保證原子；守衛不成立則整筆不變更並回 `409`（FR-016）。
 
 ## 驗證規則（`packages/shared`，Principle II）

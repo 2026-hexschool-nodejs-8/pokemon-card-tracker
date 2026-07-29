@@ -57,7 +57,7 @@ description: "Task list for 後台卡片與來源管理總覽頁"
 ### Backend
 
 - [X] T004 [P] [US1] 擴充 `adminListCardsQuerySchema`：新增 `cursor`（string cuid, optional）與 `limit`（字串轉正整數、預設 20、上限 50），既有 `keyword`/`language`/`grade`/`isActive` 不變，於 `packages/shared/schemas/card.schema.js`（data-model 驗證規則、contract Query 參數）
-- [X] T005 [US1] 為 `GET /admin/cards` 加 cursor 分頁於 `apps/api/src/routes/admin.cards.js`：解析新 query，Prisma `take: limit` + `cursor: { id: cursor }` + `skip: 1`（有帶 cursor 時）、`orderBy: { updatedAt: 'desc' }`、沿用 `include: { _count: { select: { sources: true } } }`，回應改為加法式 `{ data, nextCursor }`（最後一批 `nextCursor: null`）（research §1、contract）（相依 T004）
+- [X] T005 [US1] 為 `GET /admin/cards` 加 cursor 分頁於 `apps/api/src/routes/admin.cards.js`：解析新 query，Prisma `take: limit` + `cursor: { id: cursor }` + `skip: 1`（有帶 cursor 時）、`orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]`、沿用 `include: { _count: { select: { sources: true } } }`，回應改為加法式 `{ data, nextCursor }`（最後一批 `nextCursor: null`）（research §1、contract）（相依 T004）
 - [X] T006 [P] [US1] 契約測試 `GET /admin/cards` 分頁於 `apps/api/src/routes/admin.cards.pagination.test.js`（`node:test`）：`limit=20` 且資料 > 20 時 `data.length===20` 且 `nextCursor` 非 null、以回傳 cursor 接續不重複不遺漏、最後一批 `nextCursor===null`、`isActive=false` 只回停用卡、`keyword` 同時比對卡名與卡號（contract 契約測試要點）
 
 ### Frontend

@@ -4,11 +4,17 @@
 
 ## 1. 卡片清單分頁策略（供無限滾動）
 
-- **Decision**：對既有 `GET /admin/cards` 加 **cursor-based 分頁**：query 新增 `cursor`（上一批最後一張卡的 `id`）與 `limit`（預設 20，上限如 50）。回應改為 `{ data: Card[], nextCursor: string | null }`（加法式，保留 `data`）。以 Prisma `take: limit`、`cursor: { id }`、`skip: 1` 實作，排序沿用 `orderBy: { updatedAt: 'desc' }`。
-- **Rationale**：無限滾動天然是「往後接續」而非「跳頁」，cursor 分頁在資料變動（開關切換造成 `updatedAt` 改變）時比 offset 穩定、較少重複／漏項；且 `id` 為 cuid 有唯一性可當游標。既有排序鍵 `updatedAt` 可能重複，故以 `id` 作為 cursor 的穩定鍵（Prisma cursor 以唯一欄位定位）。
+- **Decision**：對既有 `GET /admin/cards` 加 **cursor-based 分頁**：query 新增 `cursor`（上一批最後一張卡的 `id`）與 `limit`（預設 20，上限如 50）。回應改為 `{ data: Card[], nextCursor: string | null }`（加法式，保留 `data`）。以 Prisma `take: limit`、`cursor: { id }`、`skip: 1` 實作，排序為 `orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]`。
+- **Rationale**：無限滾動天然是「往後接續」而非「跳頁」，cursor 分頁比 offset 更符合語意；`id` 為 cuid 有唯一性可當游標。
+  **排序鍵必須是不可變欄位**：Prisma 的 `cursor: { id }` 是拿該筆的「當前」排序值去定位，所以只要排序鍵事後被改寫，
+  游標就會錯位。`createdAt` 建立後不再變動，`id desc` 則處理同毫秒建立的並列。
 - **Alternatives considered**：
   - Offset/page 分頁：實作直觀但在即時開關造成排序位移時會漏卡或重複，且不符無限滾動語意。
-  - Keyset（`updatedAt` + `id` 複合游標）：最嚴謹，但本專案量級（200 張）用 Prisma `cursor: { id }` 已足夠，複合游標屬過度設計。
+  - 排序鍵用 `updatedAt`（原始決策，已推翻）：追蹤開關與抓價 job 都會改寫 `updatedAt`，被改的卡跳到排序最前 →
+    游標錯位 → 後續批次重複；若被改的是「尚未載入」的卡（例如捲動途中抓價 job 跑過），它會越過游標而**永遠不出現**。
+    迴歸測試見 `admin.cards.pagination.test.js`「批次之間有卡片被更新」。
+  - Keyset（`updatedAt` + `id` 複合游標）：能凍結游標位置、解決上述「重複」，但**解決不了「遺漏」**——
+    任何往前掃描的分頁都會漏掉跳到掃描位置前面的資料，這是可變排序鍵的固有問題，換掉排序鍵才是根治。
 - **相容性**：目前前端 `lib/api.js` 無 `adminGetCards`，`GET /admin/cards` 無既有前端消費者；改為預設分頁不破壞現有畫面，且為 spec Assumptions 明列的必要能力。
 
 ## 2. 前端無限滾動實作
