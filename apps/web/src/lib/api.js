@@ -5,6 +5,13 @@ import { getToken, clearToken } from './auth.js';
 
 const BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
+// request() 不在 React 樹內拿不到 useNavigate，由 App 掛載時把 navigate 註冊進來，
+// session 失效時才能用 SPA 導頁而不是整頁重載
+let navigate = null;
+export const setNavigate = (fn) => {
+  navigate = fn;
+};
+
 async function request(path, { method = 'GET', body, auth = false } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth) {
@@ -18,8 +25,13 @@ async function request(path, { method = 'GET', body, auth = false } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 401) {
+  // 需帶 token 的請求收到 401 = session 失效（過期／被撤銷）：
+  // 清掉 token 並導向登入頁，避免各頁自己接 401、或停在殘缺畫面（FR-001）。
+  // replace 讓失效的頁面不留在瀏覽紀錄，登入後按上一頁不會又跳回來。
+  // 只在 auth 請求處理——登入失敗也是 401，那要留在原頁顯示錯誤訊息。
+  if (auth && res.status === 401) {
     clearToken();
+    navigate?.('/admin/login', { replace: true });
   }
 
   const json = await res.json().catch(() => ({}));

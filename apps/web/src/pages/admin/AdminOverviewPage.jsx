@@ -132,7 +132,13 @@ export default function AdminOverviewPage() {
           isActive: filters.isActive || undefined,
         });
         if (myId !== reqSeq.current) return; // 條件已變，丟棄
-        setCards((prev) => [...prev, ...data]);
+        // 以 id 去重：排序鍵 updatedAt 會被本頁的開關操作改寫（Prisma @updatedAt），
+        // 被改的卡會跳到排序最前，後續批次因而可能重送已載入的卡片。
+        // 重複的 id 會讓 AccordionItem value 撞號（展開一列連動另一列、來源快取對不上）
+        setCards((prev) => {
+          const seen = new Set(prev.map((c) => c.id));
+          return [...prev, ...data.filter((c) => !seen.has(c.id))];
+        });
         setNextCursor(nc);
       } catch (e) {
         if (myId === reqSeq.current) setError(e.message);
