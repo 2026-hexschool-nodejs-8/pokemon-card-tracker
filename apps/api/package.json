@@ -7,12 +7,14 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "job:once": "node src/scripts/runJobOnce.js",
+    "test": "node --test",
     "currency:once": "node src/scripts/runCurrencySyncOnce.js"
   },
   "dependencies": {
     "@pct/db": "*",
     "@pct/shared": "*",
     "bcryptjs": "^2.4.3",
+    "cheerio": "^1.2.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",

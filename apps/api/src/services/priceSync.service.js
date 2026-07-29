@@ -10,6 +10,7 @@ import { normalizePrice, isSuspiciousPrice } from '../lib/normalizePrice.js';
 import { getAdapter } from '../adapters/registry.js';
 import { withTimeout } from '../lib/timeout.js';
 import { logger } from '../lib/logger.js';
+import { convertToTwd } from '../lib/convertToTwd.js';
 import { conflict } from '../lib/httpError.js';
 
 const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 10000;
@@ -36,6 +37,8 @@ export async function runPriceSync({ triggerType, cardId } = {}) {
     include: { card: true },
   });
 
+  const ratesToTwd = await loadRatesToTwd();
+
   const job = await prisma.priceFetchJob.create({
     data: { triggerType, status: JOB_STATUS.RUNNING, totalSources: sources.length },
   });
@@ -49,7 +52,7 @@ export async function runPriceSync({ triggerType, cardId } = {}) {
   for (const source of sources) {
     const startedAt = Date.now();
     try {
-      await processOneSource(job.id, source);
+      await processOneSource(job.id, source, ratesToTwd);
       successCount += 1;
     } catch (err) {
       failedCount += 1;
@@ -76,8 +79,14 @@ export async function runPriceSync({ triggerType, cardId } = {}) {
   return finished;
 }
 
+// 把 Currency 表載成 Map：幣別 → rateToTwd（整個 job 查一次）
+async function loadRatesToTwd() {
+  const rows = await prisma.currency.findMany();
+  return new Map(rows.map((r) => [r.code, r.rateToTwd]));
+}
+
 // ── 單一來源：抓價 → 清洗 → 寫快照 → 更新卡牌 → 寫成功 log ──
-async function processOneSource(jobId, source) {
+async function processOneSource(jobId, source, ratesToTwd) {
   const startedAt = Date.now();
   const adapter = getAdapter(source);
 
@@ -90,40 +99,86 @@ async function processOneSource(jobId, source) {
   // 統一清洗（擋 0 / NaN / Infinity，清掉貨幣符號與逗號）
   const price = normalizePrice(result.rawText ?? result.price);
   const currency = result.currency || source.currency;
-  const isSuspicious = isSuspiciousPrice(price, source.card.latestPrice);
 
-  await prisma.$transaction([
-    prisma.priceSnapshot.create({
+  // 換算台幣（失敗回 null + reason，不中斷 job）
+  const { priceTwd, reason: twdReason } = convertToTwd(price, currency, ratesToTwd);
+  if (priceTwd === null) {
+    logger.warn(`來源 ${source.provider}(${source.id}) 台幣換算失敗：${twdReason}`);
+  }
+
+  // 異常判斷改用台幣比較：多來源幣別不同時，原幣價 vs latestPrice 會比到不同幣別
+  // 價格缺失（如換算失敗的 null）由 isSuspiciousPrice 自行防範
+  const isSuspicious = isSuspiciousPrice(priceTwd, source.card.latestPriceTwd);
+
+  const imageUrl = typeof result.imageUrl === 'string' ? result.imageUrl.trim() : '';
+  const isValidImage = /^https?:\/\//i.test(imageUrl);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.priceSnapshot.create({
       data: {
         cardId: source.cardId,
         sourceId: source.id,
         provider: result.provider || source.provider,
         price,
         currency,
+        priceTwd,
         rawText: result.rawText ?? String(result.price),
         fetchedAt: new Date(result.fetchedAt || Date.now()),
         isSuspicious,
       },
-    }),
-    prisma.card.update({
+    });
+
+    // 價格摘要一律更新；圖片用條件更新，避免同 job 多來源覆寫
+    await tx.card.update({
       where: { id: source.cardId },
-      data: { latestPrice: price, latestCurrency: currency, lastFetchedAt: new Date() },
-    }),
-    prisma.priceSource.update({
+      data: {
+        latestPrice: price,
+        latestCurrency: currency,
+        latestPriceTwd: priceTwd,
+        lastFetchedAt: new Date(),
+      },
+    });
+
+    if (isValidImage) {
+      const filled = await tx.card.updateMany({
+        where: {
+          id: source.cardId,
+          OR: [{ imageUrl: null }, { imageUrl: '' }],
+        },
+        data: { imageUrl },
+      });
+      if (filled.count > 0) {
+        logger.info(`Card ${source.cardId} 寫入 imageUrl（來源 ${source.provider}）`);
+      }
+    } else {
+      const card = await tx.card.findUnique({
+        where: { id: source.cardId },
+        select: { imageUrl: true },
+      });
+      if (!card?.imageUrl) {
+        logger.warn(`Card ${source.cardId} 缺 imageUrl（來源 ${source.provider}）`);
+      }
+    }
+
+    await tx.priceSource.update({
       where: { id: source.id },
       data: { lastSuccessAt: new Date(), lastError: null },
-    }),
-    prisma.priceFetchLog.create({
+    });
+
+    await tx.priceFetchLog.create({
       data: {
         jobId,
         cardId: source.cardId,
         sourceId: source.id,
         status: LOG_STATUS.SUCCESS,
-        message: `抓價成功 ${currency} ${price}${isSuspicious ? '（疑似異常）' : ''}`,
+        message:
+          `抓價成功 ${currency} ${price}` +
+          (isSuspicious ? '（疑似異常）' : '') +
+          (priceTwd === null ? `（台幣換算失敗：${twdReason}）` : ` ≈ TWD ${priceTwd}`),
         durationMs: Date.now() - startedAt,
       },
-    }),
-  ]);
+    });
+  });
 }
 
 // ── 單一來源失敗：記錄錯誤，不中斷整個 job ──
