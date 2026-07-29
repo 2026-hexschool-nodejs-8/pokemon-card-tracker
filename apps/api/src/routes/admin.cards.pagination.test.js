@@ -1,4 +1,5 @@
-// 契約測試：GET /admin/cards cursor 分頁（透過 service adminListCards）
+// service 層測試：adminListCards 的 cursor 分頁與篩選
+//（HTTP 層的 adminAuth / Zod / status 對應見 admin.cards.http.test.js）
 // 需可連到 DB；連不到則 skip（與既有 *.test.js 慣例一致）
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -76,6 +77,69 @@ test('GET /admin/cards cursor 分頁：批量、接續不重不漏、到底、is
     // 只命中卡名的關鍵字（cardNumber 不含此字串）→ 回該卡
     const byName = await adminListCards({ keyword: `${TEST_RUN_ID} 皮卡丘 7`, limit: 50 });
     assert.ok(byName.data.some((c) => c.id === created[7].id));
+  } finally {
+    for (const c of created) {
+      await prisma.card.delete({ where: { id: c.id } }).catch(() => {});
+    }
+  }
+});
+
+// 迴歸測試：排序鍵若用 updatedAt（會被開關切換與抓價 job 改寫），
+// 被改的卡會跳到排序最前，游標定位錯位 → 後續批次重複或遺漏。
+// 改用 createdAt（建立後不再變動）後，分頁途中有資料被更新也不受影響。
+test('cursor 分頁：批次之間有卡片被更新，仍不重複、不遺漏', async (t) => {
+  if (!(await canReachDatabase())) {
+    t.skip('database is not reachable; start postgres and run migrations to execute this integration test');
+    return;
+  }
+
+  const RUN = `mut-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const created = [];
+  try {
+    for (let i = 0; i < 25; i++) {
+      created.push(
+        await prisma.card.create({
+          data: {
+            name: `${RUN} 卡 ${i}`,
+            cardNumber: `${RUN}-${String(i).padStart(2, '0')}`,
+            language: 'ja',
+            condition: 'raw',
+            isActive: true,
+          },
+        }),
+      );
+    }
+
+    // 第一批
+    const page1 = await adminListCards({ keyword: RUN, limit: 10 });
+    assert.equal(page1.data.length, 10);
+
+    // 模擬兩種會改寫 updatedAt 的事件：
+    // (1) 管理者關掉「游標那張卡」的追蹤
+    await prisma.card.update({
+      where: { id: page1.data[page1.data.length - 1].id },
+      data: { isActive: false },
+    });
+    // (2) 抓價 job 更新一張「還沒載入」的卡的摘要
+    await prisma.card.update({
+      where: { id: created[0].id },
+      data: { lastFetchedAt: new Date(), latestPrice: 1234 },
+    });
+
+    // 走完剩下的批次
+    const seen = [...page1.data.map((c) => c.id)];
+    let cursor = page1.nextCursor;
+    let guard = 0;
+    while (cursor && guard++ < 10) {
+      const page = await adminListCards({ keyword: RUN, limit: 10, cursor });
+      seen.push(...page.data.map((c) => c.id));
+      cursor = page.nextCursor;
+    }
+
+    // 25 張全部拿到，且沒有任何一張重複
+    assert.equal(new Set(seen).size, 25, '不應遺漏任何卡片');
+    assert.equal(seen.length, 25, '不應重複回傳同一張卡片');
+    assert.deepEqual(new Set(seen), new Set(created.map((c) => c.id)));
   } finally {
     for (const c of created) {
       await prisma.card.delete({ where: { id: c.id } }).catch(() => {});
