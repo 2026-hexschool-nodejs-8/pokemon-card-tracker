@@ -100,17 +100,82 @@ async function main() {
     },
   });
 
-  console.log('✅ 建立 5 張卡牌（含 1 張高價、1 張尚未抓價、1 張已停用追蹤）');
+  console.log('✅ 建立 5 張手工卡牌（含 1 張高價、1 張尚未抓價、1 張已停用追蹤）');
+
+  // ── 批次卡牌 ──
+  // 後台總覽頁每批載入 20 張，卡片總數要超過 20 才看得到「捲到底接續載入第二批」。
+  // 這裡補 25 張湊到 30 張，並讓語言 / 狀態別 / 追蹤狀態 / 來源數量都有變化，
+  // 好讓篩選、來源數量欄位、「尚無來源」空狀態都有資料可驗。
+  // 屬性一律由索引推導而非亂數，重跑 seed 結果才會一致。
+  const BULK_NAMES = [
+    'ヒトカゲ', 'ゼニガメ', 'フシギダネ', 'イーブイ', 'ミミッキュ',
+    'ゲンガー', 'カビゴン', 'ラプラス', 'ギャラドス', 'サーナイト',
+    'ルカリオ', 'ガブリアス', 'レックウザ', 'ミュウ', 'セレビィ',
+    'ジラーチ', 'デオキシス', 'ダークライ', 'アルセウス', 'ゾロアーク',
+    'ゼクロム', 'レシラム', 'キュレム', 'ゼラオラ', 'マギアナ',
+  ];
+  const LANGS = ['ja', 'en', 'zh'];
+  const CURRENCY_BY_LANG = { ja: 'JPY', en: 'USD', zh: 'TWD' };
+  const CONDITIONS = ['raw', 'PSA9', 'PSA10'];
+
+  let bulkSourceCount = 0;
+  const pricedBulk = []; // 之後要灌快照與最新價摘要的卡
+
+  for (const [i, name] of BULK_NAMES.entries()) {
+    const language = LANGS[i % LANGS.length];
+    const currency = CURRENCY_BY_LANG[language];
+    // 每 7 張安排 1 張停用，讓「僅停用」篩選有東西可看
+    const isActive = i % 7 !== 6;
+    // 來源數量輪流 2 / 1 / 1 / 1 / 0，0 用來驗「尚無來源」空狀態
+    const sourceCount = i % 5 === 4 ? 0 : i % 3 === 0 ? 2 : 1;
+
+    const card = await prisma.card.create({
+      data: {
+        name,
+        cardNumber: `${String(i + 1).padStart(3, '0')}/BULK`,
+        setName: `Demo Set ${Math.floor(i / 5) + 1}`,
+        language,
+        condition: CONDITIONS[i % CONDITIONS.length],
+        isActive,
+        imageUrl: `https://placehold.co/240x336?text=${encodeURIComponent(name)}`,
+        sources: {
+          create: Array.from({ length: sourceCount }, (_, s) =>
+            s % 2 === 0
+              ? { type: 'api', provider: 'mockApi', externalId: `bulk-${i}-${s}`, currency }
+              : {
+                  type: 'crawler',
+                  provider: 'mockCrawler',
+                  url: `https://example.com/cards/bulk-${i}-${s}`,
+                  currency,
+                },
+          ),
+        },
+      },
+      include: { sources: true },
+    });
+
+    bulkSourceCount += sourceCount;
+    // 每 4 張留 1 張「從未抓過價」，讓摘要列的「—」空狀態有資料可看
+    if (sourceCount > 0 && i % 4 !== 3) {
+      pricedBulk.push({ card, source: card.sources[0], base: 500 + i * 137 });
+    }
+  }
+
+  console.log(
+    `✅ 建立 ${BULK_NAMES.length} 張批次卡牌（共 ${bulkSourceCount} 個來源），卡牌總數 ${5 + BULK_NAMES.length} 張`,
+  );
 
   // ── 歷史快照（為前 3 張卡各灌幾筆，形成趨勢）──
   const seedSnapshots = [
-    { card: pikachu, source: pikachu.sources[0], base: 12000 },
-    { card: charizard, source: charizard.sources[0], base: 3500 },
-    { card: charizardHigh, source: charizardHigh.sources[0], base: 85000 },
+    { card: pikachu, source: pikachu.sources[0], base: 12000, days: 7 },
+    { card: charizard, source: charizard.sources[0], base: 3500, days: 7 },
+    { card: charizardHigh, source: charizardHigh.sources[0], base: 85000, days: 7 },
+    // 批次卡各灌 3 天就好：目的是讓摘要列的最新價 / 最後更新時間有值，不是畫趨勢圖
+    ...pricedBulk.map((entry) => ({ ...entry, days: 2 })),
   ];
 
-  for (const { card, source, base } of seedSnapshots) {
-    const days = 7;
+  let snapshotCount = 0;
+  for (const { card, source, base, days } of seedSnapshots) {
     let last = null;
     for (let i = days; i >= 0; i--) {
       const fetchedAt = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
@@ -127,6 +192,7 @@ async function main() {
           fetchedAt,
         },
       });
+      snapshotCount++;
     }
     // 同步卡牌最新價格摘要
     await prisma.card.update({
@@ -134,7 +200,7 @@ async function main() {
       data: { latestPrice: last, latestCurrency: source.currency, lastFetchedAt: new Date() },
     });
   }
-  console.log('✅ 建立 24 筆歷史價格快照');
+  console.log(`✅ 建立 ${snapshotCount} 筆歷史價格快照（${seedSnapshots.length} 張卡有最新價）`);
 
   // ── 一筆成功 job、一筆失敗 job ──
   const successJob = await prisma.priceFetchJob.create({
