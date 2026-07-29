@@ -12,7 +12,7 @@ import {
 import { adminAuth } from '../middleware/adminAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { notFound } from '../lib/httpError.js';
-import { adminListCards, deactivateLastSource } from '../services/card.service.js';
+import { adminListCards, deactivateLastSource, updateSource } from '../services/card.service.js';
 
 const router = Router();
 router.use(adminAuth);
@@ -109,11 +109,12 @@ router.patch(
 );
 
 // PATCH /admin/sources/:id － 編輯價格來源
+// 關掉「最後一個啟用來源」須改走上面的 deactivate-last（會連動停用卡片），這裡回 409 擋下
 router.patch(
   '/sources/:id',
   asyncHandler(async (req, res) => {
     const data = updateSourceSchema.parse(req.body);
-    const source = await prisma.priceSource.update({ where: { id: req.params.id }, data });
+    const source = await updateSource(req.params.id, data);
     res.json({ data: source });
   }),
 );
