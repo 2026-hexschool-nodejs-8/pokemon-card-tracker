@@ -9,8 +9,9 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
-import { getCard, getCardPrices } from '@/lib/api';
+import { getCard, getCardPrices, getCardPricesCsvUrl } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 const fmtTime = (t) => (t ? new Date(t).toLocaleString('zh-TW') : '—');
 
@@ -41,6 +42,10 @@ export default function CardDetailPage() {
   }));
   const hasTwd = chartData.some((d) => d.priceTwd !== null);
 
+  function downloadCsv() {
+    window.location.href = getCardPricesCsvUrl(card.id);
+  }
+
   return (
     <div className="space-y-6">
       <Link to="/" className="text-sm text-muted-foreground hover:underline">
@@ -49,10 +54,17 @@ export default function CardDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">{card.name}</CardTitle>
-          <p className="text-muted-foreground">
-            {card.cardNumber}　{card.setName}　{card.language} / {card.condition}
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="text-2xl">{card.name}</CardTitle>
+              <p className="text-muted-foreground">
+                {card.cardNumber}　{card.setName}　{card.language} / {card.condition}
+              </p>
+            </div>
+            <Button type="button" variant="outline" onClick={downloadCsv}>
+              匯出 CSV
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-1">
           {card.latestPriceTwd !== null ? (
