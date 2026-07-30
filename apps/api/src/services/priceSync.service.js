@@ -140,9 +140,8 @@ async function processOneSource(jobId, source, ratesToTwd) {
   }
 
   // 異常判斷改用台幣比較：多來源幣別不同時，原幣價 vs latestPrice 會比到不同幣別
-  // 換算失敗（priceTwd 為 null）就不判斷，避免 null 被當 0 誤判成暴跌
-  const isSuspicious =
-    priceTwd !== null && isSuspiciousPrice(priceTwd, source.card.latestPriceTwd);
+  // 價格缺失（如換算失敗的 null）由 isSuspiciousPrice 自行防範
+  const isSuspicious = isSuspiciousPrice(priceTwd, source.card.latestPriceTwd);
 
   const imageUrl = typeof result.imageUrl === 'string' ? result.imageUrl.trim() : '';
   const isValidImage = /^https?:\/\//i.test(imageUrl);
