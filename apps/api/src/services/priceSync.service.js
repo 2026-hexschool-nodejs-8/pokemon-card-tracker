@@ -103,15 +103,24 @@ async function processOneSource(jobId, source) {
   const isSuspicious = isSuspiciousPrice(price, source.card.latestPrice);
   const fetchedAt = new Date(result.fetchedAt || Date.now());
 
-  // 去重：若最新一筆 snapshot 的 fetchedAt >= 本次資料時間，代表沒有新成交，跳過寫入
-  const latestSnapshot = await prisma.priceSnapshot.findFirst({
-    where: { sourceId: source.id },
-    orderBy: { fetchedAt: 'desc' },
-    select: { fetchedAt: true },
-  });
-  if (latestSnapshot && latestSnapshot.fetchedAt >= fetchedAt) {
-    logger.info(`來源 ${source.provider}(${source.id}) 無新資料（最新成交 ${fetchedAt.toISOString()} 已存在），略過`);
-    return;
+  // 去重（僅 tcgplayer）：同一筆成交會重複抓到，若最新一筆 snapshot 的 fetchedAt >= 本次資料時間，
+  // 代表沒有新成交，跳過寫入。其他 provider（每次抓價即代表一個新資料點）不受影響。
+  if (source.provider === 'tcgplayer') {
+    const latestSnapshot = await prisma.priceSnapshot.findFirst({
+      where: { sourceId: source.id },
+      orderBy: { fetchedAt: 'desc' },
+      select: { fetchedAt: true },
+    });
+    if (latestSnapshot && latestSnapshot.fetchedAt >= fetchedAt) {
+      logger.info(`來源 ${source.provider}(${source.id}) 無新資料（最新成交 ${fetchedAt.toISOString()} 已存在），略過寫入 snapshot`);
+      // 即使沒有新資料可寫，這次抓價本身仍是成功的，更新 lastSuccessAt 讓
+      // Admin Jobs 看得出「有抓，只是沒有新成交」，而非長期沉默看起來像失敗。
+      await prisma.priceSource.update({
+        where: { id: source.id },
+        data: { lastSuccessAt: new Date(), lastError: null },
+      });
+      return;
+    }
   }
 
   await prisma.$transaction([

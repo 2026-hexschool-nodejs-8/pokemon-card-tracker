@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '@pct/db';
+import { JOB_STATUS, JOB_TRIGGER_TYPE, LOG_STATUS } from '@pct/shared';
 import { adminAuth } from '../middleware/adminAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getProductIds, scrapeCard } from '../adapters/crawler/tcgplayer.scraper.js';
@@ -11,8 +12,20 @@ router.use(adminAuth);
 
 const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 10000;
 
-// ── 共用：將一批 productId 逐一匯入 ──
+// total=0 沒有目標視為成功；全部失敗（沒有任何 imported/skipped）視為失敗；其餘部分成功。
+function resolveImportJobStatus(total, imported, skipped, failed) {
+  if (total === 0 || failed === 0) return JOB_STATUS.SUCCESS;
+  if (imported === 0 && skipped === 0) return JOB_STATUS.FAILED;
+  return JOB_STATUS.PARTIAL_SUCCESS;
+}
+
+// ── 共用：將一批 productId 逐一匯入，記錄成一個 PriceFetchJob（triggerType: manual），
+// 讓透過這條路由匯入的資料也能在 Admin Jobs 頁面被看到 ──
 async function importProductIds(productIds) {
+  const job = await prisma.priceFetchJob.create({
+    data: { triggerType: JOB_TRIGGER_TYPE.MANUAL, status: JOB_STATUS.RUNNING, totalSources: productIds.length },
+  });
+
   let imported = 0;
   let skipped = 0;
   let failed = 0;
@@ -41,6 +54,13 @@ async function importProductIds(productIds) {
       } catch (err) {
         failed++;
         results.push({ productId, status: 'failed', error: err.message });
+        await prisma.priceFetchLog.create({
+          data: {
+            jobId: job.id,
+            status: LOG_STATUS.FAILED,
+            message: `scrapeCard(${productId}) 失敗：${err.message}`.slice(0, 500),
+          },
+        });
         continue;
       }
 
@@ -132,13 +152,23 @@ async function importProductIds(productIds) {
       }
 
       imported++;
+      const salesCount = validSales.length || (cardData.price != null ? 1 : 0);
       results.push({
         productId,
         status: 'imported',
         cardId: card.id,
         name: cardData.name,
         price: cardData.price ?? null,
-        salesCount: validSales.length || (cardData.price != null ? 1 : 0),
+        salesCount,
+      });
+      await prisma.priceFetchLog.create({
+        data: {
+          jobId: job.id,
+          cardId: card.id,
+          sourceId: source.id,
+          status: LOG_STATUS.SUCCESS,
+          message: `匯入成功：${cardData.name}（寫入 ${salesCount} 筆歷史價格）`,
+        },
       });
     } catch (err) {
       if (card) {
@@ -146,10 +176,29 @@ async function importProductIds(productIds) {
       }
       failed++;
       results.push({ productId, status: 'failed', error: err.message });
+      await prisma.priceFetchLog.create({
+        data: {
+          jobId: job.id,
+          status: LOG_STATUS.FAILED,
+          message: `匯入 productId=${productId} 失敗：${err.message}`.slice(0, 500),
+        },
+      });
     }
   }
 
-  return { imported, skipped, failed, results };
+  const status = resolveImportJobStatus(productIds.length, imported, skipped, failed);
+  await prisma.priceFetchJob.update({
+    where: { id: job.id },
+    data: {
+      status,
+      finishedAt: new Date(),
+      successCount: imported,
+      failedCount: failed,
+      errorMessage: failed > 0 ? `${failed} 筆匯入失敗，詳見 job logs` : null,
+    },
+  });
+
+  return { imported, skipped, failed, results, jobId: job.id };
 }
 
 // ── POST /admin/import/tcgplayer ── 批次匯入（依頁碼）
