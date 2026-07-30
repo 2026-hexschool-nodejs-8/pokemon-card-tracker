@@ -176,12 +176,26 @@ export default function CardListPage() {
                     <p className="text-xs text-gray-400">
                       {c.language} / {c.condition}
                     </p>
-                    <p
-                      className="text-lg font-extrabold mt-2"
-                      style={{ color: '#3B4CCA', fontFamily: 'Nunito, sans-serif' }}
-                    >
-                      {fmtPrice(c.latestPrice, c.latestCurrency)}
-                    </p>
+                    {c.latestPriceTwd != null ? (
+                      <>
+                        <p
+                          className="text-lg font-extrabold mt-2"
+                          style={{ color: '#3B4CCA', fontFamily: 'Nunito, sans-serif' }}
+                        >
+                          NT$ {c.latestPriceTwd.toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-gray-400">
+                          原幣 {fmtPrice(c.latestPrice, c.latestCurrency)}
+                        </p>
+                      </>
+                    ) : (
+                      <p
+                        className="text-lg font-extrabold mt-2"
+                        style={{ color: '#3B4CCA', fontFamily: 'Nunito, sans-serif' }}
+                      >
+                        {fmtPrice(c.latestPrice, c.latestCurrency)}
+                      </p>
+                    )}
                     <p className="text-[10px] text-gray-300 mt-1">
                       更新：{fmtTime(c.lastFetchedAt)}
                     </p>

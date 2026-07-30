@@ -40,9 +40,11 @@ export function normalizePrice(raw) {
 
 /**
  * 判斷新價格相對舊價格是否疑似異常（暴漲暴跌 > 50%）
+ * 任一價格缺失（null）或非正數時無從判斷，一律視為不可疑
  * @returns {boolean}
  */
 export function isSuspiciousPrice(newPrice, prevPrice) {
+  if (!newPrice || newPrice <= 0) return false;
   if (!prevPrice || prevPrice <= 0) return false;
   const ratio = Math.abs(newPrice - prevPrice) / prevPrice;
   return ratio > 0.5;

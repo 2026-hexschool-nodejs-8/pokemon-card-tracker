@@ -3,8 +3,22 @@
 import { mockApiAdapter } from './api/mockApi.adapter.js';
 import { mockCrawlerAdapter } from './crawler/mockCrawler.adapter.js';
 import { tcgplayerCrawlerAdapter } from './crawler/tcgplayerCrawler.adapter.js';
+import { priceChartingAdapter } from './crawler/priceCharting.adapter.js';
+import { cardLandAdapter } from './crawler/cardLand.adapter.js';
+import { yuyuteiAdapter } from './crawler/yuyutei.adapter.js';
+import { rakutenAdapter } from './crawler/rakuten.adapter.js';
+import { tcgdexApiAdapter } from './api/tcgdexApi.adapter.js';
 
-const adapters = [mockApiAdapter, mockCrawlerAdapter, tcgplayerCrawlerAdapter];
+const adapters = [
+  mockApiAdapter,
+  mockCrawlerAdapter,
+  tcgplayerCrawlerAdapter,
+  priceChartingAdapter,
+  cardLandAdapter,
+  yuyuteiAdapter,
+  rakutenAdapter,
+  tcgdexApiAdapter,
+];
 
 // 以 provider 名稱為 key
 const byProvider = new Map(adapters.map((a) => [a.name, a]));
