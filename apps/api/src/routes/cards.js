@@ -57,6 +57,12 @@ function csvFilename(card) {
   return `${safeName || 'card-prices'}.csv`;
 }
 
+// Content-Disposition 的 filename 只能穩定放 ASCII，filename* 用 UTF-8 保留中文/日文檔名
+function csvContentDisposition(filename) {
+  const fallback = filename.replace(/[^\x20-\x7E]/g, '-');
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
 // GET /cards?keyword=&language=&grade=
 router.get(
   '/',
@@ -94,7 +100,7 @@ router.get(
     const csv = buildPricesCsv(card, prices);
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${csvFilename(card)}"`);
+    res.setHeader('Content-Disposition', csvContentDisposition(csvFilename(card)));
     // 加上 UTF-8 BOM，讓 Excel 開啟中文欄位時不亂碼
     res.send(`\uFEFF${csv}`);
   }),
