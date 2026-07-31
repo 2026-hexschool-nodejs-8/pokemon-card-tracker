@@ -48,8 +48,12 @@ export default function CardDetailPage() {
           getCard(id),
           getCardPrices(id),
           // 漲跌幅是輔助資訊，單獨失敗不該讓整頁只剩錯誤訊息；
-          // 這裡先接住錯誤變成 null，下面的 {summary && ...} 會自動略過這一塊
-          getCardPriceSummary(id).catch(() => null),
+          // 這裡先接住錯誤變成 null，下面的 {summary && ...} 會自動略過這一塊。
+          // 但一定要留下 console 訊息：畫面只是少一塊，沒有這行會查不到原因
+          getCardPriceSummary(id).catch((err) => {
+            console.warn('[CardDetail] 漲跌幅載入失敗，略過該區塊', err);
+            return null;
+          }),
         ]);
         setCard(cardRes.data);
         setPrices(priceRes.data);
