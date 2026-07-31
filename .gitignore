@@ -31,3 +31,10 @@ logs/
 # Claude Code：團隊共用設定進版控，個人設定不進
 .claude/settings.local.json
 .claude/projects/
+
+# Spec Kit 工具本體不進版控（specs/ 產出的文件要保留）
+.specify/
+.claude/skills/speckit-*/
+
+# MCP 暫存
+.playwright-mcp/
