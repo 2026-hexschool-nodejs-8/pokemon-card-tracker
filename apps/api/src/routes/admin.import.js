@@ -1,6 +1,12 @@
 import { Router } from 'express';
 import { prisma } from '@pct/db';
-import { JOB_STATUS, JOB_TRIGGER_TYPE, LOG_STATUS } from '@pct/shared';
+import {
+  JOB_STATUS,
+  JOB_TRIGGER_TYPE,
+  LOG_STATUS,
+  importTcgplayerSchema,
+  importTcgplayerSearchSchema,
+} from '@pct/shared';
 import { adminAuth } from '../middleware/adminAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getProductIds, scrapeCard } from '../adapters/crawler/tcgplayer.scraper.js';
@@ -205,8 +211,7 @@ async function importProductIds(productIds) {
 router.post(
   '/tcgplayer',
   asyncHandler(async (req, res) => {
-    const page = Math.max(1, parseInt(req.body.page, 10) || 1);
-    const limit = Math.min(50, Math.max(1, parseInt(req.body.limit, 10) || 10));
+    const { page, limit } = importTcgplayerSchema.parse(req.body);
 
     const productIds = await getProductIds(page);
     const targets = productIds.slice(0, limit);
@@ -219,13 +224,9 @@ router.post(
 router.post(
   '/tcgplayer/search',
   asyncHandler(async (req, res) => {
-    const { name } = req.body;
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return res.status(400).json({ error: '請提供卡牌名稱（name）' });
-    }
-    const limit = Math.min(20, Math.max(1, parseInt(req.body.limit, 10) || 5));
+    const { name, limit } = importTcgplayerSearchSchema.parse(req.body);
 
-    const productIds = await getProductIds(1, name.trim());
+    const productIds = await getProductIds(1, name);
     const targets = productIds.slice(0, limit);
 
     if (targets.length === 0) {
@@ -233,7 +234,7 @@ router.post(
     }
 
     const summary = await importProductIds(targets);
-    res.json({ ...summary, searchName: name.trim() });
+    res.json({ ...summary, searchName: name });
   }),
 );
 

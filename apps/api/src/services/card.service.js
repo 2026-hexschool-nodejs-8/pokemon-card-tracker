@@ -1,6 +1,9 @@
 import axios from 'axios';
 import { prisma } from '@pct/db';
 import { notFound } from '../lib/httpError.js';
+import { logger } from '../lib/logger.js';
+
+const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 10000;
 
 // 前台列表：支援 keyword（卡名/卡號）、language、grade（condition）
 export async function listCards({ keyword, language, grade } = {}) {
@@ -42,10 +45,18 @@ export async function getTcgplayerPriceHistory(id, range = 'quarter') {
   const src = card.sources?.find((s) => s.provider === 'tcgplayer');
   if (!src?.externalId) return null;
 
-  const { data } = await axios.get(
-    `https://infinite-api.tcgplayer.com/price/history/${src.externalId}/detailed?range=${range}`,
-    { headers: INFINITE_HEADERS },
-  );
+  // 外部 API 失敗／逾時不應該讓這個端點整個 500：歷史圖表本來就是錦上添花的資訊，
+  // 這裡的語意跟「找不到來源」一致 － 都回傳 null，前端已經會處理沒有資料的情況
+  let data;
+  try {
+    ({ data } = await axios.get(
+      `https://infinite-api.tcgplayer.com/price/history/${src.externalId}/detailed?range=${range}`,
+      { headers: INFINITE_HEADERS, timeout: FETCH_TIMEOUT_MS },
+    ));
+  } catch (err) {
+    logger.warn(`tcgplayer 歷史價格取得失敗（cardId=${id}）：${err.message}`);
+    return null;
+  }
 
   const nm = data.result?.find(
     (r) => r.condition === 'Near Mint' && r.variant === 'Normal' && r.language === 'English',

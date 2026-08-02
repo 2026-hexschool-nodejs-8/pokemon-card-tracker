@@ -7,7 +7,8 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "job:once": "node src/scripts/runJobOnce.js",
-    "test": "node --test",
+    "test": "node --env-file=../../.env.test --experimental-test-module-mocks --test --test-concurrency=1",
+    "test:cov": "node --env-file=../../.env.test --experimental-test-module-mocks --test --test-concurrency=1 --experimental-test-coverage",
     "currency:once": "node src/scripts/runCurrencySyncOnce.js"
   },
   "dependencies": {
@@ -21,5 +22,9 @@
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
     "playwright": "^1.61.1"
+  },
+  "devDependencies": {
+    "nock": "^14.0.17",
+    "supertest": "^7.2.2"
   }
 }
