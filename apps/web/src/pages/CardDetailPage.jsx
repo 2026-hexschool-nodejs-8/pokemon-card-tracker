@@ -13,6 +13,8 @@ import { getCard, getCardPrices, getCardPriceSummary } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const fmtTime = (t) => (t ? new Date(t).toLocaleString('zh-TW') : '—');
+// 多來源平均價先四捨五入到整數位，再加上千分位顯示。
+const fmtAverageTwd = (price) => Math.round(price).toLocaleString('zh-TW');
 
 // 台股慣例：紅漲綠跌。想改成歐美的綠漲紅跌就把兩個顏色對調
 function ChangeBadge({ label, change }) {
@@ -87,13 +89,16 @@ export default function CardDetailPage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-1">
-          {card.latestPriceTwd !== null ? (
-            <>
-              <p className="text-3xl font-bold">NT$ {card.latestPriceTwd.toLocaleString()}</p>
-              <p className="text-sm text-muted-foreground">
-                原幣 {card.latestCurrency} {card.latestPrice?.toLocaleString()}
-              </p>
-            </>
+          {/* 顯示後端查詢時計算出的多來源平均價。 */}
+          {card.averagePriceTwd != null ? (
+            <p className="text-3xl font-bold">
+              NT$ {fmtAverageTwd(card.averagePriceTwd)}
+              {card.averagePriceSourceCount > 1 && (
+                <span className="ml-3 align-middle text-sm font-medium text-muted-foreground">
+                  {card.averagePriceSourceCount} 來源平均
+                </span>
+              )}
+            </p>
           ) : (
             <p className="text-3xl font-bold">
               {card.latestPrice === null

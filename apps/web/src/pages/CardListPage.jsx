@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const fmtPrice = (p, c) => (p === null ? '尚未更新' : `${c ?? ''} ${p.toLocaleString()}`);
 const fmtTime = (t) => (t ? new Date(t).toLocaleString('zh-TW') : '—');
+// 多來源平均價先四捨五入到整數位，再加上千分位顯示。
+const fmtAverageTwd = (price) => Math.round(price).toLocaleString('zh-TW');
 
 export default function CardListPage() {
   const [keyword, setKeyword] = useState('');
@@ -69,13 +71,16 @@ export default function CardListPage() {
                   <span className="text-muted-foreground">語言 / 品相：</span>
                   {c.language} / {c.condition}
                 </p>
-                {c.latestPriceTwd !== null ? (
-                  <>
-                    <p className="text-lg font-semibold">NT$ {c.latestPriceTwd.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground">
-                      原幣 {fmtPrice(c.latestPrice, c.latestCurrency)}
-                    </p>
-                  </>
+                {/* 顯示後端查詢時計算出的多來源平均價。 */}
+                {c.averagePriceTwd != null ? (
+                  <p className="text-lg font-semibold">
+                    NT$ {fmtAverageTwd(c.averagePriceTwd)}
+                    {c.averagePriceSourceCount > 1 && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        {c.averagePriceSourceCount} 來源平均
+                      </span>
+                    )}
+                  </p>
                 ) : (
                   <p className="text-lg font-semibold">{fmtPrice(c.latestPrice, c.latestCurrency)}</p>
                 )}
