@@ -54,6 +54,9 @@ export async function getProductIds(page = 1, searchName = '') {
   const tab = await context.newPage();
   const productIds = [];
   const pendingHandlers = [];
+  // 用來區分「頁面根本沒載入成功」跟「有正常回應、只是這頁/這個關鍵字真的沒有結果」：
+  // 前者才應該視為爬蟲失敗（throw），後者是合法的空結果（回傳 []）
+  let sawSearchResponse = false;
 
   try {
     tab.on('response', (response) => {
@@ -61,6 +64,7 @@ export async function getProductIds(page = 1, searchName = '') {
       const contentType = response.headers()['content-type'] || '';
       if (!contentType.includes('application/json')) return;
       if (!url.includes('tcgplayer.com') && !url.includes('tcgapi')) return;
+      sawSearchResponse = true;
       pendingHandlers.push(
         response.json().then((body) => extractProductIds(body, productIds)).catch(() => {}),
       );
@@ -74,6 +78,7 @@ export async function getProductIds(page = 1, searchName = '') {
   }
 
   if (productIds.length === 0) {
+    if (sawSearchResponse) return [];
     throw new Error('無法從搜尋頁取得 productId，請確認頁面是否正常載入或設定 TCGPLAYER_COOKIE');
   }
 

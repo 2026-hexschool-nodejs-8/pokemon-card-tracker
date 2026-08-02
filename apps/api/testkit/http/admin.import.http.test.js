@@ -169,9 +169,10 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
     await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
   });
 
-  // R1：admin.import.js 對「最新一筆」用 validSales[length-1]，這裡鎖住現況行為，
-  // 並提醒與 tcgplayerCrawler.adapter.js（用 latestSales[0]）的假設相反，需要交叉核對真實 API 順序後定案。
-  await t.test('（R1／IMP-07）latestSales 多筆時，card.latestPrice 取 validSales 陣列最後一筆', async (t) => {
+  // R1（已修正）：admin.import.js 原本對「最新一筆」用 validSales[length-1]，
+  // 與 tcgplayerCrawler.adapter.js（用 latestSales[0]）的假設相反。TCGPlayer latestsales API
+  // 回傳順序為新到舊（見 tcgplayer.latestsales.json fixture），故已改為取 [0]，兩者假設統一。
+  await t.test('（R1 已修正／IMP-07）latestSales 多筆時，card.latestPrice 取陣列第一筆（最新一筆）', async (t) => {
     const id = 910051;
     getProductIdsImpl = async () => [id];
     scrapeCardImpl = async (productId) => ({
@@ -180,8 +181,8 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
       imageUrl: `https://example.test/${productId}.jpg`,
       price: 50,
       latestSales: [
-        { purchasePrice: 45, orderDate: '2026-07-20T10:00:00Z' },
-        { purchasePrice: 42, orderDate: '2026-07-18T10:00:00Z' }, // validSales 陣列的最後一筆
+        { purchasePrice: 45, orderDate: '2026-07-20T10:00:00Z' }, // [0] － 最新一筆
+        { purchasePrice: 42, orderDate: '2026-07-18T10:00:00Z' },
       ],
     });
     t.after(() => cleanupImportedCards([id]));
@@ -191,7 +192,7 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
     assert.equal(res.body.imported, 1);
 
     const card = await prisma.card.findFirst({ where: { cardNumber: String(id) } });
-    assert.equal(card.latestPrice, 42, '現況行為：取 validSales[length-1]，與 adapter 的 latestSales[0] 假設相反（見 test-plan R1）');
+    assert.equal(card.latestPrice, 45, '取 validSales[0]，與 adapter 的 latestSales[0] 假設一致（R1 已修正）');
 
     const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.jobId } });
     await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});

@@ -152,3 +152,76 @@ test('scrapeCard：TCGPLAYER_COOKIE 有設定時，request header 會帶 Cookie'
   await scrapeCard(123);
   assert.equal(capturedCookie, 'session=abc123');
 });
+
+// getProductIds 需要 Playwright 開真的瀏覽器，這裡用 t.mock.module 換掉 'playwright'，
+// 隔離 chromium／網路，並用假的 response 事件模擬「頁面收到搜尋 API 回應」這件事。
+// 每個測試都用帶查詢字串的動態 import 拿一份全新的 tcgplayer.scraper.js，
+// 確保它內部的 `import { chromium } from 'playwright'` 會重新解析到當次 mock 的版本。
+function makeFakeResponse({ url, json, contentType = 'application/json' }) {
+  return {
+    url: () => url,
+    headers: () => ({ 'content-type': contentType }),
+    json: async () => json,
+  };
+}
+
+function makeFakeChromium(responses) {
+  return {
+    launch: async () => ({
+      newContext: async () => ({
+        newPage: async () => {
+          const listeners = [];
+          return {
+            on: (event, cb) => {
+              if (event === 'response') listeners.push(cb);
+            },
+            goto: async () => {
+              for (const response of responses) {
+                for (const cb of listeners) cb(response);
+              }
+            },
+            waitForTimeout: async () => {},
+          };
+        },
+      }),
+      close: async () => {},
+    }),
+  };
+}
+
+async function loadGetProductIds(t, responses) {
+  t.mock.module('playwright', { exports: { chromium: makeFakeChromium(responses) } });
+  const mod = await import(`./tcgplayer.scraper.js?t=${Date.now()}-${Math.random()}`);
+  return mod.getProductIds;
+}
+
+test('getProductIds：完全沒收到任何符合條件的回應（頁面可能沒載入成功）→ throw', async (t) => {
+  const getProductIds = await loadGetProductIds(t, []);
+  await assert.rejects(() => getProductIds(1), /無法從搜尋頁取得 productId/);
+});
+
+test('getProductIds：非 JSON／非 tcgplayer 網域的回應會被忽略，等同沒收到回應 → throw', async (t) => {
+  const noise = makeFakeResponse({ url: 'https://example.com/tracking.gif', contentType: 'image/gif', json: {} });
+  const getProductIds = await loadGetProductIds(t, [noise]);
+  await assert.rejects(() => getProductIds(1));
+});
+
+test('getProductIds：有收到搜尋 API 回應但內容沒有任何 productId（真的查無結果）→ 回傳空陣列，不 throw', async (t) => {
+  const empty = makeFakeResponse({
+    url: 'https://mpapi.tcgplayer.com/v2/search/request?q=xxxxxxxxxx',
+    json: { results: [] },
+  });
+  const getProductIds = await loadGetProductIds(t, [empty]);
+  const result = await getProductIds(1, 'xxxxxxxxxx');
+  assert.deepEqual(result, []);
+});
+
+test('getProductIds：正常回應含 productId → 回傳去重後的陣列', async (t) => {
+  const withResults = makeFakeResponse({
+    url: 'https://mpapi.tcgplayer.com/v2/search/request',
+    json: { results: [{ productId: 111 }, { productId: 111 }, { productId: 222 }] },
+  });
+  const getProductIds = await loadGetProductIds(t, [withResults]);
+  const result = await getProductIds(1);
+  assert.deepEqual(result, [111, 222]);
+});

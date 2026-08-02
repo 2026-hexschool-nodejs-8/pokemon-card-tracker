@@ -101,7 +101,9 @@ async function importProductIds(productIds) {
       });
 
       if (validSales.length > 0) {
-        const latest = validSales[validSales.length - 1];
+        // cardData.latestSales 沿用 TCGPlayer latestsales API 的原始順序（新到舊，見 tcgplayer.scraper.js），
+        // 這裡取 [0] 才是真正最新一筆，須與 tcgplayerCrawler.adapter.js 的假設一致（見 R1）
+        const latest = validSales[0];
         await prisma.$transaction([
           ...validSales.map(({ price, orderDate }) =>
             prisma.priceSnapshot.create({

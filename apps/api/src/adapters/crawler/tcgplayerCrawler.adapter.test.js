@@ -77,10 +77,10 @@ test('currency 缺省時 fallback 為 USD', async (t) => {
   assert.equal(result.currency, 'USD');
 });
 
-// R1：admin.import.js 用 validSales[length-1] 當「最新一筆」，
-// 這裡的 adapter 用 latestSales[0] 當「最新一筆」－ 兩者假設相反。
-// 此測試鎖住 adapter 目前的實際行為（取第一筆），供交叉比對 admin.import.js 的行為（見 admin.import.test.js IMP-07）。
-test('（R1）fetchedAt 目前採用 latestSales[0] 的 orderDate（而非最後一筆）', async (t) => {
+// R1（已修正）：admin.import.js 原本用 validSales[length-1] 當「最新一筆」，與這裡的
+// adapter（用 latestSales[0]）假設相反；已改為兩者統一取 [0]（見 admin.import.js／admin.import.http.test.js IMP-07）。
+// 此測試鎖住 adapter 本身的行為：只信任陣列順序（取第一筆），不會自己按 orderDate 重新排序。
+test('（R1 已修正）fetchedAt 採用 latestSales[0] 的 orderDate（而非最後一筆）', async (t) => {
   const adapter = await loadAdapterWithScrapeCard(t, async () => ({
     productId: 123,
     name: 'Test Card',
