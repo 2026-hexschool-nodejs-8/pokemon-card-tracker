@@ -9,7 +9,7 @@ import { BASE_CURRENCY } from '@pct/shared';
 /**
  * 把某個原幣價格換算成台幣。
  * @param {number} price 已清洗過的原幣價格（normalizePrice 之後的正數）
- * @param {string} currency 原幣別（'JPY' / 'USD' / 'HKD' / 'TWD'）
+ * @param {string} currency 原幣別（'JPY' / 'USD' / 'HKD' / 'EUR' / 'TWD'）
  * @param {Map<string, number>} ratesToTwd 幣別 → rateToTwd
  * @returns {{ priceTwd: number|null, reason: string|null }}
  */
