@@ -3,7 +3,7 @@ import { notFound } from '../lib/httpError.js';
 
 // 前台列表：支援 keyword（卡名/卡號）、language、grade（condition）
 export async function listCards({ keyword, language, grade } = {}) {
-  return prisma.card.findMany({
+  const cards = await prisma.card.findMany({
     where: {
       isActive: true,
       ...(language ? { language } : {}),
@@ -19,6 +19,10 @@ export async function listCards({ keyword, language, grade } = {}) {
     },
     orderBy: { updatedAt: 'desc' },
   });
+
+  // 列表 API 回傳前，幫每張卡補上查詢時計算出的多來源平均價。
+  // 這樣前端讀取 /cards 時，可直接取得每張卡的 averagePriceTwd 與 averagePriceSourceCount。
+  return attachAveragePriceSummaries(cards);
 }
 
 export async function getCardById(id) {
@@ -27,7 +31,88 @@ export async function getCardById(id) {
     include: { sources: { where: { isActive: true } } },
   });
   if (!card) throw notFound('找不到這張卡牌');
-  return card;
+  // 詳情 API 回傳前，補上查詢時計算出的多來源平均價。
+  // 這樣前端讀取 /cards/:id 時，可直接取得 averagePriceTwd 與 averagePriceSourceCount。
+  return attachAveragePriceSummary(card);
+}
+
+// 多來源平均價：不寫入 Card 欄位，改在查詢卡牌時即時計算給前端顯示。
+// 計算規則：每個啟用來源只取最新一筆有效台幣價，排除可疑價格與換算失敗資料。
+// 沒有任何有效來源價格時，統一回傳前端可判斷的空平均價摘要。
+function buildEmptyAveragePriceSummary() {
+  return { averagePriceTwd: null, averagePriceSourceCount: 0 };
+}
+
+// 將同一張卡的快照整理成平均價摘要：同一來源只採用排序後遇到的第一筆最新價格。
+function summarizeAveragePriceSnapshots(snapshots) {
+  const latestPriceBySource = new Map();
+  for (const snapshot of snapshots) {
+    if (!latestPriceBySource.has(snapshot.sourceId)) {
+      latestPriceBySource.set(snapshot.sourceId, snapshot.priceTwd);
+    }
+  }
+
+  const prices = [...latestPriceBySource.values()].filter(Number.isFinite);
+  if (prices.length === 0) return buildEmptyAveragePriceSummary();
+
+  const average = prices.reduce((sum, value) => sum + value, 0) / prices.length;
+  return {
+    averagePriceTwd: Math.round(average * 100) / 100,
+    averagePriceSourceCount: prices.length,
+  };
+}
+
+// 批次查詢多張卡的有效快照，避免列表頁為每張卡各查一次資料庫。
+async function getAveragePriceSummaries(cardIds) {
+  const uniqueCardIds = [...new Set(cardIds)].filter(Boolean);
+  if (uniqueCardIds.length === 0) return new Map();
+
+  const snapshots = await prisma.priceSnapshot.findMany({
+    where: {
+      cardId: { in: uniqueCardIds },
+      priceTwd: { not: null },
+      isSuspicious: false,
+      source: { isActive: true },
+    },
+    orderBy: [{ cardId: 'asc' }, { sourceId: 'asc' }, { fetchedAt: 'desc' }],
+  });
+
+  const snapshotsByCardId = new Map();
+  for (const snapshot of snapshots) {
+    const list = snapshotsByCardId.get(snapshot.cardId) ?? [];
+    list.push(snapshot);
+    snapshotsByCardId.set(snapshot.cardId, list);
+  }
+
+  return new Map(
+    uniqueCardIds.map((cardId) => [
+      cardId,
+      summarizeAveragePriceSnapshots(snapshotsByCardId.get(cardId) ?? []),
+    ]),
+  );
+}
+
+// 單張卡平均價查詢：沿用批次查詢邏輯，保持列表與詳情頁計算規則一致。
+async function getAveragePriceSummary(cardId) {
+  const summaries = await getAveragePriceSummaries([cardId]);
+  return summaries.get(cardId) ?? buildEmptyAveragePriceSummary();
+}
+
+// 將平均價摘要附加到卡牌列表中的每張卡，提供 /cards API 回傳給前端使用。
+async function attachAveragePriceSummaries(cards) {
+  const summaries = await getAveragePriceSummaries(cards.map((card) => card.id));
+  return cards.map((card) => ({
+    ...card,
+    ...(summaries.get(card.id) ?? buildEmptyAveragePriceSummary()),
+  }));
+}
+
+// 將平均價摘要附加到單張卡，提供 /cards/:id API 回傳給前端使用。
+async function attachAveragePriceSummary(card) {
+  return {
+    ...card,
+    ...(await getAveragePriceSummary(card.id)),
+  };
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -83,14 +168,21 @@ export async function getCardPriceSummary(id) {
   // 最新這筆沒有有效台幣價就無從比起，直接不查。
   // 用 falsy 判斷連 0 一起擋：convertToTwd 會 Math.round，極小的原幣價可能被四捨五入成 0，
   // 讓 0 當分子會算出 -100% 的假跌幅
-  const [change7d, change30d] = latest?.priceTwd
-    ? await Promise.all([calcChange(id, latest, 7, now), calcChange(id, latest, 30, now)])
-    : [null, null];
+  // 多來源平均價與漲跌幅一起回傳給前端
+  const [change7d, change30d, averagePriceSummary] = latest?.priceTwd
+    ? await Promise.all([
+        calcChange(id, latest, 7, now),
+        calcChange(id, latest, 30, now),
+        getAveragePriceSummary(id),
+      ])
+    : [null, null, await getAveragePriceSummary(id)];
 
   return {
     latestPrice: latest?.price ?? null,
     latestCurrency: latest?.currency ?? null,
     latestPriceTwd: latest?.priceTwd ?? null,
+    averagePriceTwd: averagePriceSummary.averagePriceTwd,
+    averagePriceSourceCount: averagePriceSummary.averagePriceSourceCount,
     fetchedAt: latest?.fetchedAt ?? null,
     change7d,
     change30d,

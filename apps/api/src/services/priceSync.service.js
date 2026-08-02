@@ -85,38 +85,6 @@ async function loadRatesToTwd() {
   return new Map(rows.map((r) => [r.code, r.rateToTwd]));
 }
 
-// 多來源平均價：取每個啟用來源的最新有效台幣價，再算成卡片層級摘要
-async function calculateAveragePriceSummary(tx, cardId) {
-  const snapshots = await tx.priceSnapshot.findMany({
-    where: {
-      cardId,
-      priceTwd: { not: null },
-      isSuspicious: false,
-      source: { isActive: true },
-    },
-    orderBy: [{ sourceId: 'asc' }, { fetchedAt: 'desc' }],
-  });
-
-  // 多來源平均價：同一來源只取最新一筆，避免單一來源的歷史資料拉偏均價
-  const latestPriceBySource = new Map();
-  for (const snapshot of snapshots) {
-    if (!latestPriceBySource.has(snapshot.sourceId)) {
-      latestPriceBySource.set(snapshot.sourceId, snapshot.priceTwd);
-    }
-  }
-
-  const prices = [...latestPriceBySource.values()].filter(Number.isFinite);
-  if (prices.length === 0) {
-    return { averagePriceTwd: null, averagePriceSourceCount: 0 };
-  }
-
-  // 多來源平均價：四捨五入到小數兩位，避免 API 回傳過長浮點數
-  const average = prices.reduce((sum, value) => sum + value, 0) / prices.length;
-  return {
-    averagePriceTwd: Math.round(average * 100) / 100,
-    averagePriceSourceCount: prices.length,
-  };
-}
 
 // ── 單一來源：抓價 → 清洗 → 寫快照 → 更新卡牌 → 寫成功 log ──
 async function processOneSource(jobId, source, ratesToTwd) {
@@ -161,8 +129,6 @@ async function processOneSource(jobId, source, ratesToTwd) {
       },
     });
 
-    // 多來源平均價：寫入本次快照後，更新該卡片的聚合價格欄位
-    const averagePriceSummary = await calculateAveragePriceSummary(tx, source.cardId);
 
     // 價格摘要一律更新；圖片用條件更新，避免同 job 多來源覆寫
     await tx.card.update({
@@ -171,8 +137,6 @@ async function processOneSource(jobId, source, ratesToTwd) {
         latestPrice: price,
         latestCurrency: currency,
         latestPriceTwd: priceTwd,
-        averagePriceTwd: averagePriceSummary.averagePriceTwd,
-        averagePriceSourceCount: averagePriceSummary.averagePriceSourceCount,
         lastFetchedAt: new Date(),
       },
     });
