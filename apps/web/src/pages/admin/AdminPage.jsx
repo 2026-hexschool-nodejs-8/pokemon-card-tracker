@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { SUPPORTED_CURRENCIES } from '@pct/shared/constants';
 import { isLoggedIn, clearToken } from '@/lib/auth';
 import { adminCreateCard, adminAddSource, adminSyncAll, adminGetJobs, adminImportTcgplayer, adminSearchImportTcgplayer, adminClearStuckJobs } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -183,7 +184,11 @@ export default function AdminPage() {
               <option value="crawler">來源類型：crawler</option>
             </select>
             <Input placeholder="provider（mockApi / mockCrawler）" value={form.provider} onChange={set('provider')} />
-            <Input placeholder="currency（JPY/USD/TWD）" value={form.currency} onChange={set('currency')} />
+            <Input
+              placeholder={`currency（${SUPPORTED_CURRENCIES.join('/')}）`}
+              value={form.currency}
+              onChange={set('currency')}
+            />
             <Input placeholder="url（crawler 必填）" value={form.url} onChange={set('url')} />
             <Input placeholder="externalId（api 用）" value={form.externalId} onChange={set('externalId')} />
             <div className="sm:col-span-2">

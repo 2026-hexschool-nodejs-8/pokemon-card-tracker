@@ -64,43 +64,70 @@ export async function getTcgplayerPriceHistory(id, range = 'quarter') {
   return nm ?? data.result?.[0] ?? null;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// 基準點允許偏離目標日期幾天。抓價排程是每天一次（PRICE_SYNC_CRON 預設 "0 2 * * *"），
+// 正常情況下第 N 天前一定有快照，這個容許值只是讓「連續幾天抓價失敗」不至於整個算不出來。
+// 放太寬會讓 13 天前的價格被當成「近 7 日」基準，失去這個功能的意義。
+const BASIS_TOLERANCE_DAYS = 2;
+
+// 算單一窗口的漲跌幅（一律用台幣 priceTwd，跨幣別的快照才能相減）。
+// 基準點的挑選規則：
+//  ① 至少要 days 天前，否則不能叫「近 N 日」
+//  ② 但最多只能再往前 BASIS_TOLERANCE_DAYS 天：避免拿更舊的價格充當基準，
+//     也避免 7 日與 30 日撈到同一筆而顯示相同數字
+//  ③ latest 必須落在窗口內，否則代表這段期間根本沒抓到價 → 回 null。
+//     少了這關，排程停擺時 latest 會同時被選為基準，算出 0% 讓「沒資料」看起來像「持平」
+//  ④ 只挑有台幣價的快照：priceTwd 上線前的舊資料是 null，算不出漲跌
+async function calcChange(cardId, latest, days, now) {
+  const newestAllowed = new Date(now - days * DAY_MS);
+  const oldestAllowed = new Date(now - (days + BASIS_TOLERANCE_DAYS) * DAY_MS);
+
+  if (latest.fetchedAt <= newestAllowed) return null;
+
+  const basis = await prisma.priceSnapshot.findFirst({
+    where: {
+      cardId,
+      priceTwd: { not: null },
+      fetchedAt: { lte: newestAllowed, gte: oldestAllowed },
+    },
+    orderBy: { fetchedAt: 'desc' },
+  });
+  // 基準價為 0 會除以 0，用 falsy 一起擋掉
+  if (!basis?.priceTwd) return null;
+
+  const diffTwd = latest.priceTwd - basis.priceTwd;
+  return {
+    diffTwd,
+    pct: Math.round((diffTwd / basis.priceTwd) * 10000) / 100,
+    basisFetchedAt: basis.fetchedAt,
+  };
+}
+
 // 7 / 30 天漲跌幅
 export async function getCardPriceSummary(id) {
   await getCardById(id);
   const now = new Date();
-  const day7 = new Date(now - 7 * 24 * 60 * 60 * 1000);
-  const day30 = new Date(now - 30 * 24 * 60 * 60 * 1000);
 
-  const latest = await prisma.priceSnapshot.findFirst({ where: { cardId: id }, orderBy: { fetchedAt: 'desc' } });
+  const latest = await prisma.priceSnapshot.findFirst({
+    where: { cardId: id },
+    orderBy: { fetchedAt: 'desc' },
+  });
 
-  // 同一張卡可能綁多個不同幣別的來源，只拿跟 latest 同幣別的歷史快照比較，
-  // 避免拿不同幣別的 price 直接相減算出沒意義的漲跌幅。
-  // TODO(#23 priceTwd 換算合併後)：改成直接比較 priceTwd，就不用管幣別是否一致。
-  const [price7dAgo, price30dAgo] = latest
-    ? await Promise.all([
-        prisma.priceSnapshot.findFirst({
-          where: { cardId: id, currency: latest.currency, fetchedAt: { lte: day7 } },
-          orderBy: { fetchedAt: 'desc' },
-        }),
-        prisma.priceSnapshot.findFirst({
-          where: { cardId: id, currency: latest.currency, fetchedAt: { lte: day30 } },
-          orderBy: { fetchedAt: 'desc' },
-        }),
-      ])
+  // 最新這筆沒有有效台幣價就無從比起，直接不查。
+  // 用 falsy 判斷連 0 一起擋：convertToTwd 會 Math.round，極小的原幣價可能被四捨五入成 0，
+  // 讓 0 當分子會算出 -100% 的假跌幅
+  const [change7d, change30d] = latest?.priceTwd
+    ? await Promise.all([calcChange(id, latest, 7, now), calcChange(id, latest, 30, now)])
     : [null, null];
-
-  const calcChange = (current, past) => {
-    if (!current || !past || past.price === 0) return null;
-    const diff = current.price - past.price;
-    return { diff, pct: Math.round((diff / past.price) * 10000) / 100 };
-  };
 
   return {
     latestPrice: latest?.price ?? null,
     latestCurrency: latest?.currency ?? null,
+    latestPriceTwd: latest?.priceTwd ?? null,
     fetchedAt: latest?.fetchedAt ?? null,
-    change7d: calcChange(latest, price7dAgo),
-    change30d: calcChange(latest, price30dAgo),
+    change7d,
+    change30d,
   };
 }
 

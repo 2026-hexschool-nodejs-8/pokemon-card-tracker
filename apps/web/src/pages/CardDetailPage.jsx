@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
-import { getCard, getCardPrices, getPriceHistory } from '@/lib/api';
+import { getCard, getCardPrices, getPriceHistory, getCardPriceSummary } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const fmtTime = (t) => (t ? new Date(t).toLocaleString('zh-TW') : '—');
@@ -22,10 +22,31 @@ const RANGES = [
   ['1Y', 'annual'],
 ];
 
+// 台股慣例：紅漲綠跌。想改成歐美的綠漲紅跌就把兩個顏色對調
+function ChangeBadge({ label, change }) {
+  if (!change) {
+    return <span className="text-muted-foreground">{label} —</span>;
+  }
+  const flat = change.pct === 0;
+  const up = change.pct > 0;
+  const color = flat ? 'text-muted-foreground' : up ? 'text-red-600' : 'text-green-600';
+  const arrow = flat ? '—' : up ? '▲' : '▼';
+  return (
+    <span
+      className={color}
+      title={`基準 ${fmtTime(change.basisFetchedAt)}｜價差 NT$ ${change.diffTwd.toLocaleString()}`}
+    >
+      {label} {arrow} {up ? '+' : ''}
+      {change.pct}%
+    </span>
+  );
+}
+
 export default function CardDetailPage() {
   const { id } = useParams();
   const [card, setCard] = useState(null);
   const [prices, setPrices] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
   const [range, setRange] = useState('quarter');
   const [history, setHistory] = useState(null);
@@ -34,9 +55,20 @@ export default function CardDetailPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [cardRes, priceRes] = await Promise.all([getCard(id), getCardPrices(id)]);
+        const [cardRes, priceRes, summaryRes] = await Promise.all([
+          getCard(id),
+          getCardPrices(id),
+          // 漲跌幅是輔助資訊，單獨失敗不該讓整頁只剩錯誤訊息；
+          // 這裡先接住錯誤變成 null，下面的 {summary && ...} 會自動略過這一塊。
+          // 但一定要留下 console 訊息：畫面只是少一塊，沒有這行會查不到原因
+          getCardPriceSummary(id).catch((err) => {
+            console.warn('[CardDetail] 漲跌幅載入失敗，略過該區塊', err);
+            return null;
+          }),
+        ]);
         setCard(cardRes.data);
         setPrices(priceRes.data);
+        setSummary(summaryRes?.data ?? null);
       } catch (e) {
         setError(e.message);
       }
@@ -121,6 +153,12 @@ export default function CardDetailPage() {
                   {card.latestPrice == null
                     ? '尚未更新價格'
                     : `${card.latestCurrency} ${card.latestPrice.toLocaleString()}`}
+                </p>
+              )}
+              {summary && (
+                <p className="flex gap-4 text-sm font-medium">
+                  <ChangeBadge label="近 7 日" change={summary.change7d} />
+                  <ChangeBadge label="近 30 日" change={summary.change30d} />
                 </p>
               )}
               <p className="text-sm text-muted-foreground">最後更新：{fmtTime(card.lastFetchedAt)}</p>

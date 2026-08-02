@@ -124,49 +124,36 @@ test('card.service', { skip: !dbReachable && '資料庫無法連線' }, async (t
       assert.equal(summary.change30d, null);
     });
 
+    // 漲跌幅一律用台幣 priceTwd 比較（見 card.service.js calcChange），
+    // 這裡的快照要帶 priceTwd 才能真的走到基準比對邏輯，而不是被「latest 無台幣價」的前置檢查提早擋掉
     await t.test('7 天前有資料 → change7d 正確計算漲跌幅', async (t) => {
       const runId = makeRunId('cs11');
       const card = await createCard(runId);
       const source = await createSource(card.id);
       const now = new Date();
       const day8Ago = new Date(now - 8 * 24 * 60 * 60 * 1000);
-      await createSnapshot(card.id, source.id, { price: 100, fetchedAt: day8Ago });
-      await createSnapshot(card.id, source.id, { price: 150, fetchedAt: now });
+      await createSnapshot(card.id, source.id, { price: 100, priceTwd: 100, fetchedAt: day8Ago });
+      await createSnapshot(card.id, source.id, { price: 150, priceTwd: 150, fetchedAt: now });
       t.after(() => cleanupByRunId(runId));
 
       const summary = await getCardPriceSummary(card.id);
-      assert.equal(summary.change7d.diff, 50);
+      assert.equal(summary.change7d.diffTwd, 50);
       assert.equal(summary.change7d.pct, 50);
     });
 
-    await t.test('past.price 為 0 時 change 為 null（避免除以 0）', async (t) => {
+    await t.test('past.priceTwd 為 0 時 change 為 null（避免除以 0）', async (t) => {
       const runId = makeRunId('cs12');
       const card = await createCard(runId);
       const source = await createSource(card.id);
       const now = new Date();
       const day8Ago = new Date(now - 8 * 24 * 60 * 60 * 1000);
-      // price 欄位有 DB 限制嗎？目前 schema 只要求 Float，允許 0 已經在別處被 normalizePrice 擋掉，
+      // priceTwd 欄位有 DB 限制嗎？目前 schema 只要求 Float，允許 0 已經在別處被 normalizePrice 擋掉，
       // 但歷史資料若因舊 bug 存進 0，summary 的除以 0 防呆仍要能正確處理
-      await createSnapshot(card.id, source.id, { price: 0, fetchedAt: day8Ago });
-      await createSnapshot(card.id, source.id, { price: 150, fetchedAt: now });
+      await createSnapshot(card.id, source.id, { price: 0, priceTwd: 0, fetchedAt: day8Ago });
+      await createSnapshot(card.id, source.id, { price: 150, priceTwd: 150, fetchedAt: now });
       t.after(() => cleanupByRunId(runId));
 
       const summary = await getCardPriceSummary(card.id);
-      assert.equal(summary.change7d, null);
-    });
-
-    await t.test('多幣別時只比較與 latest 同幣別的歷史快照', async (t) => {
-      const runId = makeRunId('cs13');
-      const card = await createCard(runId);
-      const source = await createSource(card.id);
-      const now = new Date();
-      const day8Ago = new Date(now - 8 * 24 * 60 * 60 * 1000);
-      await createSnapshot(card.id, source.id, { price: 100, currency: 'USD', fetchedAt: day8Ago });
-      await createSnapshot(card.id, source.id, { price: 9999, currency: 'JPY', fetchedAt: now });
-      t.after(() => cleanupByRunId(runId));
-
-      const summary = await getCardPriceSummary(card.id);
-      // latest 為 JPY，历史唯一一筆是 USD，幣別不同不應該拿來比較
       assert.equal(summary.change7d, null);
     });
   });
@@ -339,4 +326,189 @@ test('card.service', { skip: !dbReachable && '資料庫無法連線' }, async (t
       assert.equal(result, null);
     });
   });
+});
+
+// getCardPriceSummary 的漲跌幅基準挑選 － 對應 review 的邊界情境
+// 重點不在「算得對不對」，而在「該回 null 的時候有沒有誠實回 null」：
+// 拿自己當基準、拿過舊的價格當基準，都會讓畫面顯示看似正常卻錯誤的數字。
+const TEST_RUN_ID = `summary-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const daysAgo = (n) => new Date(Date.now() - n * DAY_MS);
+
+// snapshots: [{ days, price, currency, priceTwd }]，days 是「幾天前」
+async function createCardWith(label, snapshots) {
+  const card = await prisma.card.create({
+    data: {
+      name: `Summary Test ${label} ${TEST_RUN_ID}`,
+      cardNumber: `${TEST_RUN_ID}-${label}`,
+      setName: 'Summary Test',
+      language: 'ja',
+      condition: 'raw',
+      sources: {
+        create: [
+          {
+            type: 'api',
+            provider: 'mockApi',
+            externalId: `${TEST_RUN_ID}-${label}`,
+            currency: 'JPY',
+          },
+        ],
+      },
+    },
+    include: { sources: true },
+  });
+
+  await prisma.priceSnapshot.createMany({
+    data: snapshots.map((s) => ({
+      cardId: card.id,
+      sourceId: card.sources[0].id,
+      provider: 'mockApi',
+      price: s.price ?? 100,
+      currency: s.currency ?? 'JPY',
+      priceTwd: s.priceTwd,
+      fetchedAt: daysAgo(s.days),
+    })),
+  });
+
+  return card;
+}
+
+// 每個案例包一層：跑完一定刪卡（sources / snapshots 會 cascade）
+async function withCard(t, label, snapshots, assertFn) {
+  if (!(await canReachDatabase())) {
+    t.skip('database is not reachable; start postgres and run migrations to execute this integration test');
+    return;
+  }
+  let card;
+  try {
+    card = await createCardWith(label, snapshots);
+    assertFn(await getCardPriceSummary(card.id));
+  } finally {
+    if (card?.id) await prisma.card.delete({ where: { id: card.id } }).catch(() => {});
+  }
+}
+
+test('正常情況：7 日與 30 日各自挑到對應窗口的基準', async (t) => {
+  await withCard(
+    t,
+    'happy',
+    [
+      { days: 31, priceTwd: 500 },
+      { days: 8, priceTwd: 800 },
+      { days: 0, priceTwd: 1000 },
+    ],
+    (summary) => {
+      assert.equal(summary.change7d.diffTwd, 200);
+      assert.equal(summary.change7d.pct, 25);
+      assert.equal(summary.change30d.diffTwd, 500);
+      assert.equal(summary.change30d.pct, 100);
+      assert.ok(summary.change7d.basisFetchedAt instanceof Date);
+    },
+  );
+});
+
+test('最新快照沒有台幣價（換算失敗）→ 兩個窗口都回 null', async (t) => {
+  await withCard(
+    t,
+    'latest-null',
+    [
+      { days: 8, priceTwd: 800 },
+      { days: 0, priceTwd: null },
+    ],
+    (summary) => {
+      assert.equal(summary.change7d, null);
+      assert.equal(summary.change30d, null);
+    },
+  );
+});
+
+test('最新快照台幣價為 0 → 回 null，不是 -100%', async (t) => {
+  await withCard(
+    t,
+    'latest-zero',
+    [
+      { days: 8, priceTwd: 800 },
+      { days: 0, priceTwd: 0 },
+    ],
+    (summary) => {
+      assert.equal(summary.change7d, null);
+    },
+  );
+});
+
+test('窗口內較新的基準是 null → 跳過它，挑到有台幣價的那筆', async (t) => {
+  await withCard(
+    t,
+    'skip-null-basis',
+    [
+      { days: 8, priceTwd: 800 },
+      { days: 7.2, priceTwd: null },
+      { days: 0, priceTwd: 1000 },
+    ],
+    (summary) => {
+      assert.equal(summary.change7d.diffTwd, 200);
+      assert.equal(summary.change7d.pct, 25);
+    },
+  );
+});
+
+test('基準台幣價為 0 → 回 null，不會除以 0 變成 Infinity', async (t) => {
+  await withCard(
+    t,
+    'basis-zero',
+    [
+      { days: 8, priceTwd: 0 },
+      { days: 0, priceTwd: 1000 },
+    ],
+    (summary) => {
+      assert.equal(summary.change7d, null);
+    },
+  );
+});
+
+test('最新快照本身就超過 7 天 → 回 null，不是拿自己比自己得到 0%', async (t) => {
+  await withCard(t, 'stale-latest', [{ days: 10, priceTwd: 1000 }], (summary) => {
+    assert.equal(summary.change7d, null);
+    assert.equal(summary.change30d, null);
+  });
+});
+
+test('只有一筆很舊的歷史快照 → 不會被當成 7 日／30 日基準', async (t) => {
+  await withCard(
+    t,
+    'too-old-basis',
+    [
+      { days: 100, priceTwd: 500 },
+      { days: 0, priceTwd: 1000 },
+    ],
+    (summary) => {
+      assert.equal(summary.change7d, null);
+      assert.equal(summary.change30d, null);
+    },
+  );
+});
+
+test('完全沒有歷史快照 → 兩個窗口都回 null', async (t) => {
+  await withCard(t, 'no-history', [{ days: 0, priceTwd: 1000 }], (summary) => {
+    assert.equal(summary.change7d, null);
+    assert.equal(summary.change30d, null);
+  });
+});
+
+// 取代舊版「多幣別時只比較與 latest 同幣別的歷史快照」的假設：
+// calcChange 一律用 priceTwd 比較（不篩選 currency），所以跨幣別本來就應該能正確比較。
+test('跨幣別：USD 與 JPY 的快照一律用台幣比較', async (t) => {
+  await withCard(
+    t,
+    'cross-currency',
+    [
+      { days: 8, price: 30, currency: 'USD', priceTwd: 900 },
+      { days: 0, price: 4000, currency: 'JPY', priceTwd: 990 },
+    ],
+    (summary) => {
+      assert.equal(summary.latestCurrency, 'JPY');
+      assert.equal(summary.change7d.diffTwd, 90);
+      assert.equal(summary.change7d.pct, 10);
+    },
+  );
 });

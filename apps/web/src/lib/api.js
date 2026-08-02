@@ -38,6 +38,7 @@ export const getCards = (params = {}) => {
 };
 export const getCard = (id) => request(`/cards/${id}`);
 export const getCardPrices = (id) => request(`/cards/${id}/prices`);
+export const getCardPriceSummary = (id) => request(`/cards/${id}/prices/summary`);
 
 // ── 管理者 ──
 export const login = (email, password) =>

@@ -7,6 +7,10 @@ test('normalizePrice：合法輸入', async (t) => {
     assert.equal(normalizePrice(1234), 1234);
   });
 
+  await t.test('number 帶小數原樣通過', () => {
+    assert.equal(normalizePrice(49.7), 49.7);
+  });
+
   await t.test('數字字串', () => {
     assert.equal(normalizePrice('1234'), 1234);
   });
@@ -15,12 +19,28 @@ test('normalizePrice：合法輸入', async (t) => {
     assert.equal(normalizePrice('¥12,345'), 12345);
   });
 
+  await t.test('日圓符號 + 円 單位混用："17,800 円"', () => {
+    assert.equal(normalizePrice('17,800 円'), 17800);
+  });
+
   await t.test('美元符號 + 小數', () => {
     assert.equal(normalizePrice('$1,234.56'), 1234.56);
   });
 
+  await t.test('美元兩位小數："$922.00" → 922', () => {
+    assert.equal(normalizePrice('$922.00'), 922);
+  });
+
+  await t.test('港幣無小數："$200" → 200', () => {
+    assert.equal(normalizePrice('$200'), 200);
+  });
+
   await t.test('NT$ 字首', () => {
     assert.equal(normalizePrice('NT$500'), 500);
+  });
+
+  await t.test('NT$ 字首 + 千分位："NT$1,500" → 1500', () => {
+    assert.equal(normalizePrice('NT$1,500'), 1500);
   });
 
   await t.test('中文「円」單位', () => {
@@ -39,8 +59,35 @@ test('normalizePrice：合法輸入', async (t) => {
     assert.equal(normalizePrice('USD 99.9'), 99.9);
   });
 
+  await t.test('幣別代碼字首 HKD："HKD 200" → 200', () => {
+    assert.equal(normalizePrice('HKD 200'), 200);
+  });
+
   await t.test('科學記號字串會被 Number() 解析', () => {
     assert.equal(normalizePrice('1e3'), 1000);
+  });
+});
+
+// ── 歐系格式：逗號是小數點（feat/currency-eur）──
+test('normalizePrice：歐系逗號小數點格式', async (t) => {
+  await t.test('單一逗號 + 2 位數視為小數點："12,50" → 12.5（不是 1250）', () => {
+    assert.equal(normalizePrice('12,50'), 12.5);
+  });
+
+  await t.test('點千分位 + 逗號小數點："€1.234,56" → 1234.56', () => {
+    assert.equal(normalizePrice('€1.234,56'), 1234.56);
+  });
+
+  await t.test('EUR 代碼被清掉："EUR 12,50" → 12.5', () => {
+    assert.equal(normalizePrice('EUR 12,50'), 12.5);
+  });
+
+  await t.test('點當千分位且出現多次："1.234.567" → 1234567', () => {
+    assert.equal(normalizePrice('1.234.567'), 1234567);
+  });
+
+  await t.test('單一逗號 + 3 位數仍視為千分位："1,250" → 1250', () => {
+    assert.equal(normalizePrice('1,250'), 1250);
   });
 });
 
@@ -48,6 +95,7 @@ test('normalizePrice：邊界與非法輸入一律 throw PriceParseError', async
   const cases = [
     ['0（number）', 0],
     ['"0"（字串）', '0'],
+    ['"$0"（帶幣別符號）', '$0'],
     ['-5（number）', -5],
     ['"-5"（字串）', '-5'],
     ['NaN', NaN],
@@ -57,6 +105,7 @@ test('normalizePrice：邊界與非法輸入一律 throw PriceParseError', async
     ['undefined', undefined],
     ['空字串', ''],
     ['"abc"（無法解析）', 'abc'],
+    ['"缺貨"（無法解析）', '缺貨'],
     ['"--5"（無法解析）', '--5'],
     ['"1.2.3"（無法解析）', '1.2.3'],
   ];
