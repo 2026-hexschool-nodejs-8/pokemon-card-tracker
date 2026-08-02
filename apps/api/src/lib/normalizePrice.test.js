@@ -86,6 +86,11 @@ test('normalizePrice：歐系逗號小數點格式', async (t) => {
     assert.equal(normalizePrice('1.234.567'), 1234567);
   });
 
+  // 同一條規則下，"1.2.3" 不再視為無法解析：兩個點都當千分位清掉 → "123"
+  await t.test('點出現多次時一律當千分位（含短數字）："1.2.3" → 123（非 PriceParseError）', () => {
+    assert.equal(normalizePrice('1.2.3'), 123);
+  });
+
   await t.test('單一逗號 + 3 位數仍視為千分位："1,250" → 1250', () => {
     assert.equal(normalizePrice('1,250'), 1250);
   });
@@ -107,7 +112,6 @@ test('normalizePrice：邊界與非法輸入一律 throw PriceParseError', async
     ['"abc"（無法解析）', 'abc'],
     ['"缺貨"（無法解析）', '缺貨'],
     ['"--5"（無法解析）', '--5'],
-    ['"1.2.3"（無法解析）', '1.2.3'],
   ];
 
   for (const [label, input] of cases) {
