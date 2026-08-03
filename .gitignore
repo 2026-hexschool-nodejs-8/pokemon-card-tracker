@@ -31,7 +31,6 @@ logs/
 # Claude Code：團隊共用設定進版控，個人設定不進
 .claude/settings.local.json
 .claude/projects/
-
 USAGE.md
 爬蟲
 specification.md
