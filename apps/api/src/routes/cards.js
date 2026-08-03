@@ -1,7 +1,13 @@
 // 前台公開 API － PRD FR-03 / FR-04 / 建議 API Public 段
 import { Router } from 'express';
-import { listCardsQuerySchema } from '@pct/shared';
-import { listCards, getCardById, getCardPrices, getCardPriceSummary } from '../services/card.service.js';
+import { listCardsQuerySchema, cardPricesQuerySchema, cardTcgplayerHistoryQuerySchema } from '@pct/shared';
+import {
+  listCards,
+  getCardById,
+  getCardPrices,
+  getCardPriceSummary,
+  getTcgplayerPriceHistory,
+} from '../services/card.service.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 
 const router = Router();
@@ -38,8 +44,19 @@ router.get(
 router.get(
   '/:id/prices',
   asyncHandler(async (req, res) => {
-    const prices = await getCardPrices(req.params.id, req.query);
+    const query = cardPricesQuerySchema.parse(req.query);
+    const prices = await getCardPrices(req.params.id, query);
     res.json({ data: prices });
+  }),
+);
+
+// GET /cards/:id/tcgplayer-history?range=month|quarter|annual
+router.get(
+  '/:id/tcgplayer-history',
+  asyncHandler(async (req, res) => {
+    const { range } = cardTcgplayerHistoryQuerySchema.parse(req.query);
+    const result = await getTcgplayerPriceHistory(req.params.id, range);
+    res.json({ data: result });
   }),
 );
 

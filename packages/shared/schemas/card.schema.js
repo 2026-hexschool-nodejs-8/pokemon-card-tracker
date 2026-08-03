@@ -39,3 +39,17 @@ export const adminListCardsQuerySchema = listCardsQuerySchema.extend({
     .default(20)
     .transform((n) => Math.min(n, 50)),
 });
+
+// 卡牌歷史價格查詢參數（GET /cards/:id/prices）
+// from/to 用 z.coerce.date() 擋掉非法日期字串，避免直接傳進 Prisma 產生未預期的 500
+export const cardPricesQuerySchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  source: z.string().optional(),
+});
+
+// TCGPlayer 歷史價格查詢參數（GET /cards/:id/tcgplayer-history）
+// range 白名單，避免未經檢查的字串被直接串進外部 API 的 query string
+export const cardTcgplayerHistoryQuerySchema = z.object({
+  range: z.enum(['month', 'quarter', 'annual']).default('quarter'),
+});

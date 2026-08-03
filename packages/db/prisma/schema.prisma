@@ -63,6 +63,7 @@ model Card {
   // 由最新快照同步的摘要欄位
   latestPrice    Float?
   latestCurrency String?
+  latestPriceTwd Float? // 最新台幣價，供前台列表直接顯示（換算失敗為 null）
   lastFetchedAt  DateTime?
 
   createdAt      DateTime @default(now())
@@ -158,7 +159,7 @@ model PriceFetchLog {
 // ── 匯率（各幣別對台幣）──
 // 由匯率 API 定期更新、覆蓋寫入（每個幣別一列）；供價格清洗換算成 TWD 使用。
 model Currency {
-  code      String   @id      // 幣別代碼：USD / JPY / HKD / TWD（TWD 自己 = 1）
+  code      String   @id      // 幣別代碼：USD / JPY / HKD / EUR / TWD（TWD 自己 = 1）
   rateToTwd Float              // 1 單位該幣別 = 幾元台幣
   source    String?           // 匯率資料來源（e.g. "open.er-api.com"）
   fetchedAt DateTime          // 匯率 API 提供的資料時間

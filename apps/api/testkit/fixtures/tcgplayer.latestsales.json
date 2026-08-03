@@ -1,0 +1,25 @@
+{
+  "data": [
+    {
+      "title": "Charizard ex - 199/165",
+      "purchasePrice": 45.5,
+      "orderDate": "2026-07-20T10:00:00Z",
+      "condition": "Near Mint",
+      "language": "English"
+    },
+    {
+      "title": "Charizard ex - 199/165",
+      "purchasePrice": 42.0,
+      "orderDate": "2026-07-18T10:00:00Z",
+      "condition": "Near Mint",
+      "language": "English"
+    },
+    {
+      "title": "Charizard ex - 199/165",
+      "purchasePrice": 0,
+      "orderDate": "2026-07-15T10:00:00Z",
+      "condition": "Lightly Played",
+      "language": "English"
+    }
+  ]
+}

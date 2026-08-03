@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { SUPPORTED_CURRENCIES } from '@pct/shared/constants';
 import { isLoggedIn, clearToken } from '@/lib/auth';
-import { adminCreateCard, adminAddSource, adminSyncAll, adminGetJobs } from '@/lib/api';
+import { adminCreateCard, adminAddSource, adminSyncAll, adminGetJobs, adminImportTcgplayer, adminSearchImportTcgplayer, adminClearStuckJobs } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,12 @@ export default function AdminPage() {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [importPage, setImportPage] = useState(1);
+  const [importLimit, setImportLimit] = useState(10);
+  const [importResult, setImportResult] = useState(null);
+  const [searchName, setSearchName] = useState('');
+  const [searchLimit, setSearchLimit] = useState(5);
+  const [searchResult, setSearchResult] = useState(null);
 
   useEffect(() => {
     if (!isLoggedIn()) navigate('/admin/login');
@@ -89,6 +96,57 @@ export default function AdminPage() {
     }
   }
 
+  async function handleClearStuck() {
+    setBusy(true);
+    setError('');
+    setMsg('');
+    try {
+      const { data } = await adminClearStuckJobs();
+      setMsg(`已清除 ${data.clearedCount} 個卡住的任務`);
+      loadJobs();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSearch(e) {
+    e.preventDefault();
+    if (!searchName.trim()) return;
+    setBusy(true);
+    setError('');
+    setMsg('');
+    setSearchResult(null);
+    try {
+      const data = await adminSearchImportTcgplayer(searchName.trim(), searchLimit);
+      setSearchResult(data);
+      setMsg(data.message ?? `「${data.searchName}」搜尋完成：成功 ${data.imported}、略過 ${data.skipped}、失敗 ${data.failed}`);
+      loadJobs();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleImport() {
+    setBusy(true);
+    setError('');
+    setMsg('');
+    setImportResult(null);
+    try {
+      const data = await adminImportTcgplayer(importPage, importLimit);
+      setImportResult(data);
+      setMsg(`匯入完成：成功 ${data.imported}、略過 ${data.skipped}、失敗 ${data.failed}`);
+      loadJobs();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function logout() {
     clearToken();
     navigate('/admin/login');
@@ -126,7 +184,11 @@ export default function AdminPage() {
               <option value="crawler">來源類型：crawler</option>
             </select>
             <Input placeholder="provider（mockApi / mockCrawler）" value={form.provider} onChange={set('provider')} />
-            <Input placeholder="currency（JPY/USD/TWD）" value={form.currency} onChange={set('currency')} />
+            <Input
+              placeholder={`currency（${SUPPORTED_CURRENCIES.join('/')}）`}
+              value={form.currency}
+              onChange={set('currency')}
+            />
             <Input placeholder="url（crawler 必填）" value={form.url} onChange={set('url')} />
             <Input placeholder="externalId（api 用）" value={form.externalId} onChange={set('externalId')} />
             <div className="sm:col-span-2">
@@ -140,11 +202,155 @@ export default function AdminPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>依卡名搜尋並匯入</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            輸入卡牌名稱，從 TCGPlayer 搜尋並匯入最相關的卡牌。
+          </p>
+          <form className="flex flex-wrap gap-3 items-end" onSubmit={handleSearch}>
+            <div className="space-y-1 flex-1 min-w-48">
+              <label className="text-xs text-muted-foreground">卡牌名稱</label>
+              <Input
+                placeholder="例：Pikachu ex、Charizard"
+                value={searchName}
+                onChange={(e) => setSearchName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">匯入張數上限（max 20）</label>
+              <Input
+                type="number"
+                min={1}
+                max={20}
+                className="w-24"
+                value={searchLimit}
+                onChange={(e) => setSearchLimit(Number(e.target.value))}
+              />
+            </div>
+            <Button type="submit" disabled={busy}>
+              {busy ? '搜尋中…' : '搜尋並匯入'}
+            </Button>
+          </form>
+          {searchResult && (
+            <div className="rounded-md border p-3 text-sm space-y-2">
+              <div className="flex gap-4 font-medium">
+                <span className="text-green-600">成功 {searchResult.imported}</span>
+                <span className="text-muted-foreground">略過 {searchResult.skipped}</span>
+                <span className="text-destructive">失敗 {searchResult.failed}</span>
+              </div>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b text-muted-foreground text-left">
+                    <th className="py-1">productId</th>
+                    <th>卡名</th>
+                    <th>歷史價格筆數</th>
+                    <th>狀態</th>
+                    <th>錯誤</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {searchResult.results.map((r) => (
+                    <tr key={r.productId} className="border-b">
+                      <td className="py-1">{r.productId}</td>
+                      <td>{r.name || '—'}</td>
+                      <td>{r.salesCount != null ? `${r.salesCount} 筆` : '—'}</td>
+                      <td className={
+                        r.status === 'imported' ? 'text-green-600' :
+                        r.status === 'skipped' ? 'text-muted-foreground' : 'text-destructive'
+                      }>{r.status}</td>
+                      <td className="text-destructive">{r.error || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>TCGPlayer 爬蟲批次匯入</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            從 TCGPlayer 搜尋頁自動抓取寶可夢卡牌，建立卡牌記錄並立即同步價格與圖片。
+          </p>
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">搜尋頁碼</label>
+              <Input
+                type="number"
+                min={1}
+                className="w-24"
+                value={importPage}
+                onChange={(e) => setImportPage(Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">匯入張數上限（max 50）</label>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                className="w-24"
+                value={importLimit}
+                onChange={(e) => setImportLimit(Number(e.target.value))}
+              />
+            </div>
+            <Button onClick={handleImport} disabled={busy}>
+              {busy ? '匯入中（Playwright 啟動需數秒）…' : '開始匯入'}
+            </Button>
+          </div>
+          {importResult && (
+            <div className="rounded-md border p-3 text-sm space-y-2">
+              <div className="flex gap-4 font-medium">
+                <span className="text-green-600">成功 {importResult.imported}</span>
+                <span className="text-muted-foreground">略過 {importResult.skipped}</span>
+                <span className="text-destructive">失敗 {importResult.failed}</span>
+              </div>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b text-muted-foreground text-left">
+                    <th className="py-1">productId</th>
+                    <th>卡名</th>
+                    <th>歷史價格筆數</th>
+                    <th>狀態</th>
+                    <th>錯誤</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importResult.results.map((r) => (
+                    <tr key={r.productId} className="border-b">
+                      <td className="py-1">{r.productId}</td>
+                      <td>{r.name || '—'}</td>
+                      <td>{r.salesCount != null ? `${r.salesCount} 筆` : '—'}</td>
+                      <td className={
+                        r.status === 'imported' ? 'text-green-600' :
+                        r.status === 'skipped' ? 'text-muted-foreground' : 'text-destructive'
+                      }>{r.status}</td>
+                      <td className="text-destructive">{r.error || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>手動更新</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-3">
           <Button onClick={handleSyncAll} disabled={busy}>
             {busy ? '更新中…' : '立即抓取全部卡牌價格'}
+          </Button>
+          <Button variant="outline" onClick={handleClearStuck} disabled={busy}>
+            清除卡住的任務
           </Button>
         </CardContent>
       </Card>

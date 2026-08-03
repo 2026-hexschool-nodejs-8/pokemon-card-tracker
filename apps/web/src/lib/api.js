@@ -50,6 +50,7 @@ export const getCards = (params = {}) => {
 };
 export const getCard = (id) => request(`/cards/${id}`);
 export const getCardPrices = (id) => request(`/cards/${id}/prices`);
+export const getCardPriceSummary = (id) => request(`/cards/${id}/prices/summary`);
 
 // ── 管理者 ──
 export const login = (email, password) =>
@@ -68,6 +69,18 @@ export const adminSyncAll = () =>
   request('/admin/jobs/price-sync', { method: 'POST', auth: true });
 
 export const adminGetJobs = () => request('/admin/jobs', { auth: true });
+
+export const adminImportTcgplayer = (page, limit) =>
+  request('/admin/import/tcgplayer', { method: 'POST', body: { page, limit }, auth: true });
+
+export const adminSearchImportTcgplayer = (name, limit) =>
+  request('/admin/import/tcgplayer/search', { method: 'POST', body: { name, limit }, auth: true });
+
+export const adminClearStuckJobs = () =>
+  request('/admin/jobs/clear-stuck', { method: 'POST', auth: true });
+
+export const getPriceHistory = (id, range = 'quarter') =>
+  request(`/cards/${id}/tcgplayer-history?range=${range}`);
 
 // ── 後台總覽頁（卡片與來源管理）──
 // 卡片清單（cursor 分頁，供無限滾動）；回傳 { data, nextCursor }
