@@ -15,8 +15,10 @@ import { getCard, getCardPrices, getPriceHistory, getCardPriceSummary } from '@/
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const fmtTime = (t) => (t ? new Date(t).toLocaleString('zh-TW') : '—');
-// ?????????????????????????
-const fmtAverageTwd = (price) => Math.round(price).toLocaleString('zh-TW');
+// 後端已回傳整數平均價，前端只加上千分位顯示。
+const fmtAverageTwd = (price) => price.toLocaleString('zh-TW');
+// 依來源數顯示單一來源或多來源平均。
+const fmtSourceLabel = (count) => (count === 1 ? '單一來源' : `${count} 來源平均`);
 
 const RANGES = [
   ['1M', 'month'],
@@ -143,20 +145,20 @@ export default function CardDetailPage() {
                   {card.cardNumber}　{card.setName}　{card.language} / {card.condition}
                 </p>
               </div>
-              {/* ?????????????????? */}
+              {/* 顯示後端查詢時計算出的多來源平均價。 */}
               {card.averagePriceTwd != null ? (
                 <p className="text-3xl font-bold">
                   NT$ {fmtAverageTwd(card.averagePriceTwd)}
-                  {card.averagePriceSourceCount > 1 && (
+                  {card.averagePriceSourceCount > 0 && (
                     <span className="ml-3 align-middle text-sm font-medium text-muted-foreground">
-                      {card.averagePriceSourceCount} ????
+                      {fmtSourceLabel(card.averagePriceSourceCount)}
                     </span>
                   )}
                 </p>
               ) : (
                 <p className="text-3xl font-bold">
                   {card.latestPrice == null
-                    ? '??????'
+                    ? '尚未更新價格'
                     : `${card.latestCurrency} ${card.latestPrice.toLocaleString()}`}
                 </p>
               )}

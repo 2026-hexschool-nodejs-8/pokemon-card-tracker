@@ -5,8 +5,10 @@ import { getCards } from "@/lib/api";
 const fmtPrice = (p, c) =>
   p == null ? "尚未更新" : `${c ?? ""} ${p.toLocaleString()}`;
 const fmtTime = (t) => (t ? new Date(t).toLocaleString("zh-TW") : "—");
-// ?????????????????????????
-const fmtAverageTwd = (price) => Math.round(price).toLocaleString("zh-TW");
+// 後端已回傳整數平均價，前端只加上千分位顯示。
+const fmtAverageTwd = (price) => price.toLocaleString("zh-TW");
+// 依來源數顯示單一來源或多來源平均。
+const fmtSourceLabel = (count) => (count === 1 ? "單一來源" : `${count} 來源平均`);
 
 function getBadge(c) {
   if (c.latestPrice != null && c.latestPrice >= 5000) return "💰 高價";
@@ -178,16 +180,16 @@ export default function CardListPage() {
                     <p className="text-xs text-gray-400">
                       {c.language} / {c.condition}
                     </p>
-                    {/* ?????????????????? */}
+                    {/* 顯示後端查詢時計算出的多來源平均價。 */}
                     {c.averagePriceTwd != null ? (
                       <p
                         className="text-lg font-extrabold mt-2"
                         style={{ color: '#3B4CCA', fontFamily: 'Nunito, sans-serif' }}
                       >
                         NT$ {fmtAverageTwd(c.averagePriceTwd)}
-                        {c.averagePriceSourceCount > 1 && (
+                        {c.averagePriceSourceCount > 0 && (
                           <span className="ml-2 text-[10px] font-normal text-gray-400">
-                            {c.averagePriceSourceCount} ????
+                            {fmtSourceLabel(c.averagePriceSourceCount)}
                           </span>
                         )}
                       </p>
