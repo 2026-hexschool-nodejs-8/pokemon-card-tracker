@@ -72,7 +72,7 @@ async function getAveragePriceSummaries(cardIds) {
   const uniqueCardIds = [...new Set(cardIds)].filter(Boolean);
   if (uniqueCardIds.length === 0) return new Map();
 
-  // 只查每張卡在各來源的最新有效價格，不把全部歷史價格都撈出來。
+  // 每張卡、每個來源只取最新一筆有效台幣價，避免把全部歷史價格撈回來。
   const snapshots = await prisma.$queryRaw`
     SELECT "cardId", "sourceId", "priceTwd"
     FROM (
@@ -216,21 +216,14 @@ export async function getCardPriceSummary(id) {
   // 最新這筆沒有有效台幣價就無從比起，直接不查。
   // 用 falsy 判斷連 0 一起擋：convertToTwd 會 Math.round，極小的原幣價可能被四捨五入成 0，
   // 讓 0 當分子會算出 -100% 的假跌幅
-  // 多來源平均價與漲跌幅一起回傳給前端
-  const [change7d, change30d, averagePriceSummary] = latest?.priceTwd
-    ? await Promise.all([
-        calcChange(id, latest, 7, now),
-        calcChange(id, latest, 30, now),
-        getAveragePriceSummary(id),
-      ])
-    : [null, null, await getAveragePriceSummary(id)];
+  const [change7d, change30d] = latest?.priceTwd
+    ? await Promise.all([calcChange(id, latest, 7, now), calcChange(id, latest, 30, now)])
+    : [null, null];
 
   return {
     latestPrice: latest?.price ?? null,
     latestCurrency: latest?.currency ?? null,
     latestPriceTwd: latest?.priceTwd ?? null,
-    averagePriceTwd: averagePriceSummary.averagePriceTwd,
-    averagePriceSourceCount: averagePriceSummary.averagePriceSourceCount,
     fetchedAt: latest?.fetchedAt ?? null,
     change7d,
     change30d,
