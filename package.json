@@ -21,7 +21,9 @@
     "db:studio": "prisma studio --schema=packages/db/prisma/schema.prisma",
     "job:once": "npm run job:once -w @pct/api",
     "seed:real-sources": "node apps/api/src/scripts/seedRealSources.js",
-    "test": "npm run test -w @pct/api",
+    "test": "npm run test:api",
+    "test:api": "npm run test -w @pct/api",
+    "test:cov": "npm run test:cov -w @pct/api",
     "currency:once": "npm run currency:once -w @pct/api",
     "postinstall": "prisma generate --schema=packages/db/prisma/schema.prisma"
   },

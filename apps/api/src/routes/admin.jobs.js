@@ -1,7 +1,7 @@
 // 後台抓價任務 － PRD 建議 API「Admin Jobs」段
 import { Router } from 'express';
 import { prisma } from '@pct/db';
-import { JOB_TRIGGER_TYPE } from '@pct/shared';
+import { JOB_TRIGGER_TYPE, JOB_STATUS } from '@pct/shared';
 import { adminAuth } from '../middleware/adminAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { runPriceSync } from '../services/priceSync.service.js';
@@ -36,6 +36,19 @@ router.get(
       take: 50,
     });
     res.json({ data: jobs });
+  }),
+);
+
+// POST /admin/jobs/clear-stuck － 將所有卡在 RUNNING 的 job 強制結算為 FAILED
+// 用於後端重啟後殘留的殭屍 job
+router.post(
+  '/jobs/clear-stuck',
+  asyncHandler(async (_req, res) => {
+    const { count } = await prisma.priceFetchJob.updateMany({
+      where: { status: JOB_STATUS.RUNNING },
+      data: { status: JOB_STATUS.FAILED, finishedAt: new Date(), errorMessage: '由管理員手動清除（後端重啟後殘留）' },
+    });
+    res.json({ data: { clearedCount: count } });
   }),
 );
 
