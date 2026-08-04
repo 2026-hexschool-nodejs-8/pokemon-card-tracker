@@ -86,6 +86,75 @@ test('card.service', { skip: !dbReachable && '資料庫無法連線' }, async (t
       assert.ok(!sourceIds.includes(inactiveSource.id));
     });
 
+    await t.test('多來源平均價只取各來源最新有效價格，並四捨五入為整數', async (t) => {
+      const runId = makeRunId('avg01');
+      const card = await createCard(runId);
+      const sourceA = await createSource(card.id, { provider: runId + '-mockApi' });
+      const sourceB = await createSource(card.id, { provider: runId + '-mockCrawler' });
+      t.after(() => cleanupByRunId(runId));
+
+      await createSnapshot(card.id, sourceA.id, {
+        provider: sourceA.provider,
+        price: 100,
+        priceTwd: 100,
+        fetchedAt: new Date('2026-08-01T00:00:00Z'),
+      });
+      await createSnapshot(card.id, sourceA.id, {
+        provider: sourceA.provider,
+        price: 300,
+        priceTwd: 300,
+        fetchedAt: new Date('2026-08-02T00:00:00Z'),
+      });
+      await createSnapshot(card.id, sourceB.id, {
+        provider: sourceB.provider,
+        price: 501,
+        priceTwd: 501,
+        fetchedAt: new Date('2026-08-02T00:00:00Z'),
+      });
+
+      const result = await getCardById(card.id);
+
+      assert.equal(result.averagePriceTwd, 401);
+      assert.equal(result.averagePriceSourceCount, 2);
+    });
+
+    await t.test('多來源平均價排除無效價格資料', async (t) => {
+      const runId = makeRunId('avg02');
+      const card = await createCard(runId);
+      const validSource = await createSource(card.id, { provider: runId + '-valid' });
+      const nullPriceSource = await createSource(card.id, { provider: runId + '-null-price' });
+      const suspiciousSource = await createSource(card.id, { provider: runId + '-suspicious' });
+      const inactiveSource = await createSource(card.id, { provider: runId + '-inactive', isActive: false });
+      t.after(() => cleanupByRunId(runId));
+
+      await createSnapshot(card.id, validSource.id, {
+        provider: validSource.provider,
+        price: 200,
+        priceTwd: 200,
+      });
+      await createSnapshot(card.id, nullPriceSource.id, {
+        provider: nullPriceSource.provider,
+        price: 300,
+        priceTwd: null,
+      });
+      await createSnapshot(card.id, suspiciousSource.id, {
+        provider: suspiciousSource.provider,
+        price: 999,
+        priceTwd: 999,
+        isSuspicious: true,
+      });
+      await createSnapshot(card.id, inactiveSource.id, {
+        provider: inactiveSource.provider,
+        price: 888,
+        priceTwd: 888,
+      });
+
+      const result = await getCardById(card.id);
+
+      assert.equal(result.averagePriceTwd, 200);
+      assert.equal(result.averagePriceSourceCount, 1);
+    });
+
     await t.test('不存在 → notFound (404)', async () => {
       await assert.rejects(() => getCardById('non-existent-id'), (err) => err.status === 404);
     });

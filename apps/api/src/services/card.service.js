@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { prisma } from '@pct/db';
+import { Prisma, prisma } from '@pct/db';
 import { notFound } from '../lib/httpError.js';
 import { logger } from '../lib/logger.js';
 
@@ -61,7 +61,8 @@ function summarizeAveragePriceSnapshots(snapshots) {
 
   const average = prices.reduce((sum, value) => sum + value, 0) / prices.length;
   return {
-    averagePriceTwd: Math.round(average * 100) / 100,
+    // API 直接回傳整數台幣平均價，前端只負責加上千分位顯示。
+    averagePriceTwd: Math.round(average),
     averagePriceSourceCount: prices.length,
   };
 }
@@ -71,15 +72,28 @@ async function getAveragePriceSummaries(cardIds) {
   const uniqueCardIds = [...new Set(cardIds)].filter(Boolean);
   if (uniqueCardIds.length === 0) return new Map();
 
-  const snapshots = await prisma.priceSnapshot.findMany({
-    where: {
-      cardId: { in: uniqueCardIds },
-      priceTwd: { not: null },
-      isSuspicious: false,
-      source: { isActive: true },
-    },
-    orderBy: [{ cardId: 'asc' }, { sourceId: 'asc' }, { fetchedAt: 'desc' }],
-  });
+  // 只查每張卡在各來源的最新有效價格，不把全部歷史價格都撈出來。
+  const snapshots = await prisma.$queryRaw`
+    SELECT "cardId", "sourceId", "priceTwd"
+    FROM (
+      SELECT
+        ps."cardId",
+        ps."sourceId",
+        ps."priceTwd",
+        ROW_NUMBER() OVER (
+          PARTITION BY ps."cardId", ps."sourceId"
+          ORDER BY ps."fetchedAt" DESC, ps."createdAt" DESC, ps."id" DESC
+        ) AS rn
+      FROM "PriceSnapshot" ps
+      INNER JOIN "PriceSource" src ON src."id" = ps."sourceId"
+      WHERE ps."cardId" IN (${Prisma.join(uniqueCardIds)})
+        AND ps."priceTwd" IS NOT NULL
+        AND ps."isSuspicious" = false
+        AND src."isActive" = true
+    ) ranked
+    WHERE rn = 1
+    ORDER BY "cardId" ASC, "sourceId" ASC
+  `;
 
   const snapshotsByCardId = new Map();
   for (const snapshot of snapshots) {
