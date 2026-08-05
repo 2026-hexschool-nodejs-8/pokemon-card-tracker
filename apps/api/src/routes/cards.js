@@ -1,15 +1,26 @@
 // 前台公開 API － PRD FR-03 / FR-04 / 建議 API Public 段
 import { Router } from 'express';
-import { listCardsQuerySchema } from '@pct/shared';
-import { listCards, getCardById, getCardPrices, getCardPriceSummary } from '../services/card.service.js';
+import { listCardsQuerySchema, cardPricesQuerySchema, cardTcgplayerHistoryQuerySchema } from '@pct/shared';
+import {
+  listCards,
+  getCardById,
+  getCardPrices,
+  getCardPriceSummary,
+  getTcgplayerPriceHistory,
+} from '../services/card.service.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 
 const router = Router();
 
-// CSV 欄位跳脫：避免逗號、換行、雙引號破壞欄位格式
+// Excel / Google Sheets 會把這些開頭視為公式，CSV 匯出前需先處理
+const FORMULA_START = /^[=+\-@\t\r]/;
+
+// CSV 欄位跳脫：避免欄位格式被破壞，並防止試算表將文字當公式執行
 function escapeCsv(value) {
   if (value == null) return '';
-  const text = value instanceof Date ? value.toISOString() : String(value);
+  let text = value instanceof Date ? value.toISOString() : String(value);
+  // 前面補單引號，讓試算表把它視為純文字而不是公式
+  if (FORMULA_START.test(text)) text = `'${text}`;
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
@@ -57,10 +68,16 @@ function csvFilename(card) {
   return `${safeName || 'card-prices'}.csv`;
 }
 
+// filename* 採 RFC 5987；補 encodeURIComponent 不會處理的五個保留字元
+function encodeRfc5987Value(value) {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
 // Content-Disposition 的 filename 只能穩定放 ASCII，filename* 用 UTF-8 保留中文/日文檔名
 function csvContentDisposition(filename) {
+  // filename 給舊瀏覽器 ASCII fallback；中文 / 日文檔名由 filename* 負責
   const fallback = filename.replace(/[^\x20-\x7E]/g, '-');
-  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeRfc5987Value(filename)}`;
 }
 
 // GET /cards?keyword=&language=&grade=
@@ -95,11 +112,16 @@ router.get(
 router.get(
   '/:id/prices.csv',
   asyncHandler(async (req, res) => {
+    // 先查 card：CSV 需要卡名 / 卡號組檔名與表格欄位
     const card = await getCardById(req.params.id);
-    const prices = await getCardPrices(req.params.id, req.query);
+    // CSV 匯出沿用歷史價格查詢參數驗證（from / to / source）
+    const query = cardPricesQuerySchema.parse(req.query);
+    // card 已在上方確認存在，這裡跳過 getCardPrices 內部的重複 card 查詢
+    const prices = await getCardPrices(req.params.id, query, { skipCardCheck: true });
     const csv = buildPricesCsv(card, prices);
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    // attachment 讓瀏覽器下載檔案；csvContentDisposition 負責處理非 ASCII 檔名
     res.setHeader('Content-Disposition', csvContentDisposition(csvFilename(card)));
     // 加上 UTF-8 BOM，讓 Excel 開啟中文欄位時不亂碼
     res.send(`\uFEFF${csv}`);
@@ -110,8 +132,19 @@ router.get(
 router.get(
   '/:id/prices',
   asyncHandler(async (req, res) => {
-    const prices = await getCardPrices(req.params.id, req.query);
+    const query = cardPricesQuerySchema.parse(req.query);
+    const prices = await getCardPrices(req.params.id, query);
     res.json({ data: prices });
+  }),
+);
+
+// GET /cards/:id/tcgplayer-history?range=month|quarter|annual
+router.get(
+  '/:id/tcgplayer-history',
+  asyncHandler(async (req, res) => {
+    const { range } = cardTcgplayerHistoryQuerySchema.parse(req.query);
+    const result = await getTcgplayerPriceHistory(req.params.id, range);
+    res.json({ data: result });
   }),
 );
 
