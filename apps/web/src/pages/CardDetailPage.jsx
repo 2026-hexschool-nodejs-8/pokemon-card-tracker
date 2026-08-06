@@ -11,8 +11,15 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
-import { getCard, getCardPrices, getPriceHistory, getCardPriceSummary } from '@/lib/api';
+import {
+  getCard,
+  getCardPrices,
+  getCardPricesCsvUrl,
+  getPriceHistory,
+  getCardPriceSummary,
+} from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 const fmtTime = (t) => (t ? new Date(t).toLocaleString('zh-TW') : '—');
 // 後端已回傳整數平均價，前端只加上千分位顯示。
@@ -25,6 +32,15 @@ const RANGES = [
   ['3M', 'quarter'],
   ['1Y', 'annual'],
 ];
+
+// 產生瀏覽器下載用的 CSV 檔名，避開常見檔名保留字元
+function csvDownloadFilename(card) {
+  const safeName = `${card.name}-${card.cardNumber}`
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/\s+/g, '-')
+    .slice(0, 80);
+  return `${safeName || 'card-prices'}.csv`;
+}
 
 // 台股慣例：紅漲綠跌。想改成歐美的綠漲紅跌就把兩個顏色對調
 function ChangeBadge({ label, change }) {
@@ -52,6 +68,7 @@ export default function CardDetailPage() {
   const [prices, setPrices] = useState([]);
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
+  const [csvError, setCsvError] = useState('');
   const [range, setRange] = useState('quarter');
   const [history, setHistory] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -118,6 +135,30 @@ export default function CardDetailPage() {
   }));
   const hasTwd = twdChartData.some((d) => d.priceTwd !== null);
 
+  // 用 fetch 取回 CSV blob，避免匯出失敗時整頁離開 SPA
+  async function downloadCsv() {
+    try {
+      setCsvError('');
+      const res = await fetch(getCardPricesCsvUrl(card.id));
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `CSV 匯出失敗（${res.status}）`);
+      }
+
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = csvDownloadFilename(card);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[CardDetail] 匯出 CSV 失敗', err);
+      setCsvError(err.message || '匯出 CSV 失敗');
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Link to="/" className="text-sm text-muted-foreground hover:underline">
@@ -139,12 +180,19 @@ export default function CardDetailPage() {
               )}
             </div>
             <div className="space-y-3">
-              <div>
-                <h2 className="text-2xl font-bold">{card.name}</h2>
-                <p className="text-muted-foreground">
-                  {card.cardNumber}　{card.setName}　{card.language} / {card.condition}
-                </p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">{card.name}</h2>
+                  <p className="text-muted-foreground">
+                    {card.cardNumber}　{card.setName}　{card.language} / {card.condition}
+                  </p>
+                </div>
+                {/* 下載目前卡牌的歷史價格 CSV */}
+                <Button type="button" variant="outline" onClick={downloadCsv}>
+                  匯出 CSV
+                </Button>
               </div>
+              {csvError && <p className="text-sm text-destructive">{csvError}</p>}
               {/* 顯示後端查詢時計算出的多來源平均價。 */}
               {card.averagePriceTwd != null ? (
                 <p className="text-3xl font-bold">
