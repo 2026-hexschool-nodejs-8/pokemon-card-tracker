@@ -225,8 +225,10 @@ export async function getCardPriceSummary(id) {
 }
 
 // 歷史價格：可用 from / to / source 篩選
-export async function getCardPrices(id, { from, to, source } = {}) {
-  await getCardById(id); // 確認卡牌存在
+// 一般呼叫時要先確認卡牌存在，避免查不存在或已停用卡牌的價格。
+// CSV 匯出 route 已經先查過 card 來組檔名和欄位，所以可傳 skipCardCheck 避免同一個 request 查兩次 card。
+export async function getCardPrices(id, { from, to, source } = {}, { skipCardCheck = false } = {}) {
+  if (!skipCardCheck) await getCardById(id);
   return prisma.priceSnapshot.findMany({
     where: {
       cardId: id,

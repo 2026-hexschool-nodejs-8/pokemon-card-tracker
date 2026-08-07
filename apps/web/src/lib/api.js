@@ -50,6 +50,7 @@ export const getCards = (params = {}) => {
 };
 export const getCard = (id) => request(`/cards/${id}`);
 export const getCardPrices = (id) => request(`/cards/${id}/prices`);
+export const getCardPricesCsvUrl = (id) => `${BASE}/cards/${id}/prices.csv`;
 export const getCardPriceSummary = (id) => request(`/cards/${id}/prices/summary`);
 
 // ── 管理者 ──
