@@ -52,7 +52,9 @@ export default function CardRow({ card, onToggleTrack, toggleBusy }) {
         <span
           className={
             'w-14 shrink-0 rounded-full px-2 py-0.5 text-center text-xs ' +
-            (card.isActive ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground')
+            // 停用徽章比照隔壁綠色徽章的 bg-100 / text-700 寫法：
+            // bg-muted + text-muted-foreground 只有 4.34 對比（muted-foreground 是對著白底調的，不是對著 bg-muted）
+            (card.isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700')
           }
         >
           {card.isActive ? '追蹤中' : '停用'}

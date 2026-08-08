@@ -98,7 +98,7 @@ export default function SourceList({ entry, cardActive, onRetry, onToggleSource,
                   className={
                     s.isActive
                       ? 'rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700'
-                      : 'rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground'
+                      : 'rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700'
                   }
                 >
                   {s.isActive ? '使用中' : '停用'}

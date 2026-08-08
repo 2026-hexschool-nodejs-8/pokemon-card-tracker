@@ -3,6 +3,7 @@
 // 關閉最後一個啟用來源走確認 modal 與交易連動，並支援卡片層 / 來源層篩選。
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { SUPPORTED_LANGUAGES } from '@pct/shared/constants';
 import { isLoggedIn, clearToken } from '@/lib/auth';
 import {
   adminGetCards,
@@ -268,83 +269,91 @@ export default function AdminOverviewPage() {
 
   return (
     <div className="space-y-6">
+      {/* 標題列在深色外殼（App.jsx 的 #050505）上，字色要自己指定：
+          shadcn 的 token 是亮色模式的值，繼承下來的 text-foreground 幾乎是全黑，壓在全黑上等於看不見 */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">卡片總覽</h1>
+        <h1 className="text-xl font-bold text-white">卡片總覽</h1>
         <Button variant="outline" size="sm" onClick={logout}>
           登出
         </Button>
       </div>
 
-      {/* 篩選列（卡片層） */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Input
-          placeholder="搜尋卡名或卡號…"
-          value={textDraft.keyword}
-          onChange={(e) => setTextDraft((d) => ({ ...d, keyword: e.target.value }))}
-        />
-        <select
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-          value={filters.language}
-          onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}
-        >
-          <option value="">語言：全部</option>
-          <option value="ja">ja</option>
-          <option value="en">en</option>
-          <option value="zh">zh</option>
-        </select>
-        {/* 狀態別 grade 對應 DB condition 欄位（I1） */}
-        <Input
-          placeholder="狀態別（如 raw / PSA10）"
-          value={textDraft.grade}
-          onChange={(e) => setTextDraft((d) => ({ ...d, grade: e.target.value }))}
-        />
-        <select
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-          value={filters.isActive}
-          onChange={(e) => setFilters((f) => ({ ...f, isActive: e.target.value }))}
-        >
-          <option value="">追蹤狀態：全部</option>
-          <option value="true">僅追蹤中</option>
-          <option value="false">僅停用</option>
-        </select>
-      </div>
+      {/* 內容一律放在白色面板上（與 CardListPage / CardDetailPage 一致）：
+          面板提供亮色底，裡面的 text-foreground / text-muted-foreground 才會回到它們被設計的對比 */}
+      <div className="space-y-6 rounded-2xl bg-white p-4">
+        {/* 篩選列（卡片層） */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Input
+            placeholder="搜尋卡名或卡號…"
+            value={textDraft.keyword}
+            onChange={(e) => setTextDraft((d) => ({ ...d, keyword: e.target.value }))}
+          />
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={filters.language}
+            onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}
+          >
+            <option value="">語言：全部</option>
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <option key={lang} value={lang}>
+                {lang}
+              </option>
+            ))}
+          </select>
+          {/* 狀態別 grade 對應 DB condition 欄位（I1） */}
+          <Input
+            placeholder="狀態別（如 raw / PSA10）"
+            value={textDraft.grade}
+            onChange={(e) => setTextDraft((d) => ({ ...d, grade: e.target.value }))}
+          />
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={filters.isActive}
+            onChange={(e) => setFilters((f) => ({ ...f, isActive: e.target.value }))}
+          >
+            <option value="">追蹤狀態：全部</option>
+            <option value="true">僅追蹤中</option>
+            <option value="false">僅停用</option>
+          </select>
+        </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {loading ? (
-        <p className="text-muted-foreground">載入中…</p>
-      ) : cards.length === 0 ? (
-        <p className="text-muted-foreground">查無符合條件的卡片</p>
-      ) : (
-        <Accordion type="multiple" value={openItems} onValueChange={handleOpenChange}>
-          {cards.map((card) => (
-            <AccordionItem key={card.id} value={card.id}>
-              <CardRow
-                card={card}
-                onToggleTrack={() => handleToggleCard(card)}
-                toggleBusy={busyCards.has(card.id)}
-              />
-              <AccordionContent>
-                <SourceList
-                  entry={sourcesByCard[card.id]}
-                  cardActive={card.isActive}
-                  busySources={busySources}
-                  onRetry={() => fetchSources(card.id)}
-                  onToggleSource={(source) => handleToggleSource(card, source)}
+        {loading ? (
+          <p className="text-muted-foreground">載入中…</p>
+        ) : cards.length === 0 ? (
+          <p className="text-muted-foreground">查無符合條件的卡片</p>
+        ) : (
+          <Accordion type="multiple" value={openItems} onValueChange={handleOpenChange}>
+            {cards.map((card) => (
+              <AccordionItem key={card.id} value={card.id}>
+                <CardRow
+                  card={card}
+                  onToggleTrack={() => handleToggleCard(card)}
+                  toggleBusy={busyCards.has(card.id)}
                 />
-              </AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
-      )}
+                <AccordionContent>
+                  <SourceList
+                    entry={sourcesByCard[card.id]}
+                    cardActive={card.isActive}
+                    busySources={busySources}
+                    onRetry={() => fetchSources(card.id)}
+                    onToggleSource={(source) => handleToggleSource(card, source)}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        )}
 
-      {/* 無限滾動 sentinel + 狀態提示 */}
-      <div ref={sentinelRef} />
-      {!loading && cards.length > 0 && (
-        <p className="py-2 text-center text-xs text-muted-foreground">
-          {loadingMore ? '載入更多中…' : nextCursor === null ? '已到底' : ''}
-        </p>
-      )}
+        {/* 無限滾動 sentinel + 狀態提示 */}
+        <div ref={sentinelRef} />
+        {!loading && cards.length > 0 && (
+          <p className="py-2 text-center text-xs text-muted-foreground">
+            {loadingMore ? '載入更多中…' : nextCursor === null ? '已到底' : ''}
+          </p>
+        )}
+      </div>
 
       <ConfirmModal
         open={!!confirm}

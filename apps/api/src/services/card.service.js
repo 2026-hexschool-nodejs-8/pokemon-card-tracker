@@ -11,7 +11,9 @@ export async function listCards({ keyword, language, grade } = {}) {
     where: {
       isActive: true,
       ...(language ? { language } : {}),
-      ...(grade ? { condition: grade } : {}),
+      // grade 比照 keyword 用 contains + 大小寫不敏感：完全相等比對會讓使用者打到一半就看到「查無資料」，
+      // 而且 condition 的大小寫在資料面沒有統一（raw / PSA10），相等比對連打完整都可能落空
+      ...(grade ? { condition: { contains: grade, mode: 'insensitive' } } : {}),
       ...(keyword
         ? {
             OR: [
@@ -46,7 +48,9 @@ export async function adminListCards({
     where: {
       ...(isActive !== undefined ? { isActive } : {}),
       ...(language ? { language } : {}),
-      ...(grade ? { condition: grade } : {}),
+      // grade 比照 keyword 用 contains + 大小寫不敏感：完全相等比對會讓使用者打到一半就看到「查無資料」，
+      // 而且 condition 的大小寫在資料面沒有統一（raw / PSA10），相等比對連打完整都可能落空
+      ...(grade ? { condition: { contains: grade, mode: 'insensitive' } } : {}),
       ...(keyword
         ? {
             OR: [
