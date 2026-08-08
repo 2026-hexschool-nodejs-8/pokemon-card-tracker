@@ -106,6 +106,12 @@ export async function updateSource(sourceId, data) {
     if (!source) throw notFound('找不到這個來源');
 
     if (source.isActive && data.isActive === false) {
+      // 併發防護（write skew）：兩個請求各關掉同一張卡剩下的兩個來源時，改的是不同 row、
+      // DB 層沒有寫入衝突，兩邊的 count() 會各自讀到 2 而雙雙放行。這裡先鎖住 Card 那一列，
+      // 拿它當「這張卡的來源集合」的代表——目的不是要改 Card，純粹是製造一個共同的排隊點。
+      // 依賴 READ COMMITTED：等到鎖之後，下一個 statement 才會重新取快照讀到新的 count；
+      // 隔離等級若改成 REPEATABLE READ 以上，count() 會沿用交易開頭的舊快照，這個防護會無聲失效。
+      await tx.$queryRaw`SELECT id FROM "Card" WHERE id = ${source.cardId} FOR UPDATE`;
       const activeCount = await tx.priceSource.count({
         where: { cardId: source.cardId, isActive: true },
       });
