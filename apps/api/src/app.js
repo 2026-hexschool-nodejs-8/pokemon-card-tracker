@@ -22,10 +22,9 @@ export const ROUTE_MOUNTS = [
   ['/admin/import', adminImportRouter],
 ];
 
-function shouldEnableApiDocs() {
-  if (process.env.ENABLE_API_DOCS === 'true') return true;
-  if (process.env.ENABLE_API_DOCS === 'false') return false;
-  return process.env.NODE_ENV !== 'production';
+// 僅在明確開啟時掛文件；正式環境預設關閉，避免攤開後台端點
+export function shouldEnableApiDocs() {
+  return process.env.ENABLE_API_DOCS === 'true';
 }
 
 export function createApp() {
