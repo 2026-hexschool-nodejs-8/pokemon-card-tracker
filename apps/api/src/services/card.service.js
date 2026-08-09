@@ -1,5 +1,9 @@
+import axios from 'axios';
 import { prisma } from '@pct/db';
 import { notFound } from '../lib/httpError.js';
+import { logger } from '../lib/logger.js';
+
+const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 10000;
 
 // 前台列表：支援 keyword（卡名/卡號）、language、grade（condition）
 export async function listCards({ keyword, language, grade } = {}) {
@@ -28,6 +32,36 @@ export async function getCardById(id) {
   });
   if (!card) throw notFound('找不到這張卡牌');
   return card;
+}
+
+const INFINITE_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+  'Origin': 'https://www.tcgplayer.com',
+  'Referer': 'https://www.tcgplayer.com/',
+};
+
+export async function getTcgplayerPriceHistory(id, range = 'quarter') {
+  const card = await getCardById(id);
+  const src = card.sources?.find((s) => s.provider === 'tcgplayer');
+  if (!src?.externalId) return null;
+
+  // 外部 API 失敗／逾時不應該讓這個端點整個 500：歷史圖表本來就是錦上添花的資訊，
+  // 這裡的語意跟「找不到來源」一致 － 都回傳 null，前端已經會處理沒有資料的情況
+  let data;
+  try {
+    ({ data } = await axios.get(
+      `https://infinite-api.tcgplayer.com/price/history/${src.externalId}/detailed?range=${range}`,
+      { headers: INFINITE_HEADERS, timeout: FETCH_TIMEOUT_MS },
+    ));
+  } catch (err) {
+    logger.warn(`tcgplayer 歷史價格取得失敗（cardId=${id}）：${err.message}`);
+    return null;
+  }
+
+  const nm = data.result?.find(
+    (r) => r.condition === 'Near Mint' && r.variant === 'Normal' && r.language === 'English',
+  );
+  return nm ?? data.result?.[0] ?? null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -98,8 +132,10 @@ export async function getCardPriceSummary(id) {
 }
 
 // 歷史價格：可用 from / to / source 篩選
-export async function getCardPrices(id, { from, to, source } = {}) {
-  await getCardById(id); // 確認卡牌存在
+// 一般呼叫時要先確認卡牌存在，避免查不存在或已停用卡牌的價格。
+// CSV 匯出 route 已經先查過 card 來組檔名和欄位，所以可傳 skipCardCheck 避免同一個 request 查兩次 card。
+export async function getCardPrices(id, { from, to, source } = {}, { skipCardCheck = false } = {}) {
+  if (!skipCardCheck) await getCardById(id);
   return prisma.priceSnapshot.findMany({
     where: {
       cardId: id,

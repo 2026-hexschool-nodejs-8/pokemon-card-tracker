@@ -1,0 +1,16 @@
+{
+  "result": [
+    {
+      "condition": "Near Mint",
+      "variant": "Normal",
+      "language": "English",
+      "buckets": [{ "marketPrice": 45.5, "date": "2026-07-20" }]
+    },
+    {
+      "condition": "Lightly Played",
+      "variant": "Normal",
+      "language": "English",
+      "buckets": [{ "marketPrice": 38.0, "date": "2026-07-20" }]
+    }
+  ]
+}
