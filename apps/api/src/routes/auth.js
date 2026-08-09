@@ -23,8 +23,10 @@ router.post(
 
     const token = signToken({ sub: admin.id, email: admin.email, role: admin.role });
     res.json({
-      token,
-      admin: toAdminProfile(admin),
+      data: {
+        token,
+        admin: toAdminProfile(admin),
+      },
     });
   }),
 );
@@ -36,7 +38,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const admin = await prisma.admin.findUnique({ where: { id: req.admin.sub } });
     if (!admin) throw unauthorized('帳號已失效');
-    res.json({ admin: toAdminProfile(admin) });
+    res.json({ data: toAdminProfile(admin) });
   }),
 );
 

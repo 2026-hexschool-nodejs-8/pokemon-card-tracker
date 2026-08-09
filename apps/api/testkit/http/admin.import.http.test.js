@@ -77,10 +77,10 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
 
     const res = await request.post('/admin/import/tcgplayer').set('Authorization', makeAuthHeader()).send({ page: 1, limit: 10 });
     assert.equal(res.status, 200);
-    assert.equal(res.body.imported, 3);
-    assert.equal(res.body.failed, 0);
+    assert.equal(res.body.data.imported, 3);
+    assert.equal(res.body.data.failed, 0);
 
-    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.jobId } });
+    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.data.jobId } });
     assert.equal(job.status, 'success');
     await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
   });
@@ -96,10 +96,10 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
 
     const res = await request.post('/admin/import/tcgplayer').set('Authorization', makeAuthHeader()).send({ page: 1, limit: 10 });
     assert.equal(res.status, 200);
-    assert.equal(res.body.imported, 2);
-    assert.equal(res.body.failed, 1);
+    assert.equal(res.body.data.imported, 2);
+    assert.equal(res.body.data.failed, 1);
 
-    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.jobId } });
+    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.data.jobId } });
     assert.equal(job.status, 'partial_success');
     await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
 
@@ -115,10 +115,10 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
 
     const res = await request.post('/admin/import/tcgplayer').set('Authorization', makeAuthHeader()).send({ page: 1, limit: 10 });
     assert.equal(res.status, 200);
-    assert.equal(res.body.imported, 0);
-    assert.equal(res.body.failed, 3);
+    assert.equal(res.body.data.imported, 0);
+    assert.equal(res.body.data.failed, 3);
 
-    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.jobId } });
+    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.data.jobId } });
     assert.equal(job.status, 'failed');
     await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
   });
@@ -139,13 +139,13 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
 
     const res = await request.post('/admin/import/tcgplayer').set('Authorization', makeAuthHeader()).send({ page: 1, limit: 10 });
     assert.equal(res.status, 200);
-    assert.equal(res.body.skipped, 1);
-    assert.equal(res.body.imported, 0);
+    assert.equal(res.body.data.skipped, 1);
+    assert.equal(res.body.data.imported, 0);
 
     const cardCount = await prisma.card.count({ where: { cardNumber: String(id) } });
     assert.equal(cardCount, 1, '不應該重複建卡');
 
-    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.jobId } });
+    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.data.jobId } });
     await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
   });
 
@@ -159,13 +159,13 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
 
     const res = await request.post('/admin/import/tcgplayer').set('Authorization', makeAuthHeader()).send({ page: 1, limit: 10 });
     assert.equal(res.status, 200);
-    assert.equal(res.body.failed, 1);
-    assert.equal(res.body.imported, 0);
+    assert.equal(res.body.data.failed, 1);
+    assert.equal(res.body.data.imported, 0);
 
     const orphan = await prisma.card.findFirst({ where: { cardNumber: String(id) } });
     assert.equal(orphan, null, 'normalizePrice 失敗後應該回滾，不留孤兒卡');
 
-    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.jobId } });
+    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.data.jobId } });
     await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
   });
 
@@ -189,12 +189,12 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
 
     const res = await request.post('/admin/import/tcgplayer').set('Authorization', makeAuthHeader()).send({ page: 1, limit: 10 });
     assert.equal(res.status, 200);
-    assert.equal(res.body.imported, 1);
+    assert.equal(res.body.data.imported, 1);
 
     const card = await prisma.card.findFirst({ where: { cardNumber: String(id) } });
     assert.equal(card.latestPrice, 45, '取 validSales[0]，與 adapter 的 latestSales[0] 假設一致（R1 已修正）');
 
-    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.jobId } });
+    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.data.jobId } });
     await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
   });
 
@@ -216,7 +216,7 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
     assert.equal(snapshot.priceTwd, null);
     assert.equal(snapshot.isSuspicious, false);
 
-    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.jobId } });
+    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.data.jobId } });
     await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
   });
 
@@ -254,7 +254,7 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
     assert.equal(callCount, 5, 'getProductIds 只回 5 筆，limit clamp 到 50 不影響這裡的結果');
     t.after(() => cleanupImportedCards([1, 2, 3, 4, 5]));
 
-    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.jobId } });
+    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.data.jobId } });
     await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
   });
 
@@ -268,14 +268,17 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
     assert.equal(res.status, 400);
   });
 
-  await t.test('IMP-14：search 搜不到 → 200，不建立 job', async () => {
+  await t.test('IMP-14：search 搜不到 → 200，不建立 job，但欄位與有結果時一致', async () => {
     getProductIdsImpl = async () => [];
     const jobsBefore = await prisma.priceFetchJob.count();
 
     const res = await request.post('/admin/import/tcgplayer/search').set('Authorization', makeAuthHeader()).send({ name: '找不到的卡牌名稱' });
     assert.equal(res.status, 200);
-    assert.equal(res.body.imported, 0);
-    assert.match(res.body.message, /找不到/);
+    assert.equal(res.body.data.imported, 0);
+    assert.match(res.body.data.message, /找不到/);
+    assert.equal(res.body.data.jobId, null, '沒建立 job 時 jobId 為 null，而不是整個欄位消失');
+    assert.equal(res.body.data.searchName, '找不到的卡牌名稱');
+    assert.deepEqual(res.body.data.results, []);
 
     const jobsAfter = await prisma.priceFetchJob.count();
     assert.equal(jobsAfter, jobsBefore, 'search 搜不到時不應該建立 job');
@@ -303,14 +306,14 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
 
     const res = await request.post('/admin/import/tcgplayer').set('Authorization', makeAuthHeader()).send({ page: 1, limit: 10 });
     assert.equal(res.status, 200);
-    assert.equal(res.body.imported, 1);
-    assert.equal(res.body.failed, 1);
+    assert.equal(res.body.data.imported, 1);
+    assert.equal(res.body.data.failed, 1);
 
-    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.jobId } });
+    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.data.jobId } });
     await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
   });
 
-  await t.test('IMP-17：回應格式包含 imported/skipped/failed/results[]/jobId', async (t) => {
+  await t.test('IMP-17：回應包在 data 信封內，含 imported/skipped/failed/results[]/jobId', async (t) => {
     const ids = [910081];
     getProductIdsImpl = async () => ids;
     useScrapeCardMap(new Map(ids.map((id) => [id, { productId: id, name: `Card ${id}`, imageUrl: 'https://example.test/x.jpg', price: 10, latestSales: [] }])));
@@ -318,15 +321,16 @@ test('Admin Import HTTP', { skip: !dbReachable && '資料庫無法連線' }, asy
 
     const res = await request.post('/admin/import/tcgplayer').set('Authorization', makeAuthHeader()).send({ page: 1, limit: 10 });
     assert.equal(res.status, 200);
-    assert.ok('imported' in res.body);
-    assert.ok('skipped' in res.body);
-    assert.ok('failed' in res.body);
-    assert.ok(Array.isArray(res.body.results));
-    assert.ok('jobId' in res.body);
-    assert.ok('productId' in res.body.results[0]);
-    assert.ok('status' in res.body.results[0]);
+    assert.deepEqual(Object.keys(res.body), ['data'], '成功回應只有 data 一個頂層 key');
+    assert.ok('imported' in res.body.data);
+    assert.ok('skipped' in res.body.data);
+    assert.ok('failed' in res.body.data);
+    assert.ok(Array.isArray(res.body.data.results));
+    assert.ok('jobId' in res.body.data);
+    assert.ok('productId' in res.body.data.results[0]);
+    assert.ok('status' in res.body.data.results[0]);
 
-    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.jobId } });
+    const job = await prisma.priceFetchJob.findUnique({ where: { id: res.body.data.jobId } });
     await prisma.priceFetchJob.delete({ where: { id: job.id } }).catch(() => {});
   });
 

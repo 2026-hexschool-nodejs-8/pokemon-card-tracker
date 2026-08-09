@@ -32,8 +32,10 @@ test('認證 HTTP', { skip: !dbReachable && '資料庫無法連線' }, async (t)
 
     const res = await request.post('/admin/auth/login').send({ email: `${runId}@pct.local`, password });
     assert.equal(res.status, 200);
-    assert.ok(res.body.token);
-    assert.equal(res.body.admin.email, `${runId}@pct.local`);
+    assert.deepEqual(Object.keys(res.body), ['data'], '成功回應只有 data 一個頂層 key');
+    assert.ok(res.body.data.token);
+    assert.equal(res.body.data.admin.email, `${runId}@pct.local`);
+    assert.equal(res.body.data.admin.passwordHash, undefined);
   });
 
   await t.test('POST /admin/auth/login － 密碼錯 → 401，訊息不洩漏帳號是否存在', async (t) => {
@@ -110,16 +112,17 @@ test('認證 HTTP', { skip: !dbReachable && '資料庫無法連線' }, async (t)
       .get('/admin/auth/me')
       .set('Authorization', makeAuthHeader({ sub: admin.id, email: admin.email, role: admin.role }));
     assert.equal(res.status, 200);
-    assert.deepEqual(res.body.admin, {
+    assert.deepEqual(Object.keys(res.body), ['data'], '成功回應只有 data 一個頂層 key');
+    assert.deepEqual(res.body.data, {
       id: admin.id,
       email: admin.email,
       name: admin.name,
       role: admin.role,
     });
-    assert.equal(res.body.admin.passwordHash, undefined);
-    assert.equal(res.body.admin.sub, undefined);
-    assert.equal(res.body.admin.iat, undefined);
-    assert.equal(res.body.admin.exp, undefined);
+    assert.equal(res.body.data.passwordHash, undefined);
+    assert.equal(res.body.data.sub, undefined);
+    assert.equal(res.body.data.iat, undefined);
+    assert.equal(res.body.data.exp, undefined);
   });
 
   await t.test('GET /admin/auth/me － token 有效但帳號已刪 → 401', async () => {
