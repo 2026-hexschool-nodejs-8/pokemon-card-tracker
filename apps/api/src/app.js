@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
 
 import healthRouter from './routes/health.js';
 import cardsRouter from './routes/cards.js';
@@ -8,6 +9,24 @@ import adminCardsRouter from './routes/admin.cards.js';
 import adminJobsRouter from './routes/admin.jobs.js';
 import adminImportRouter from './routes/admin.import.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { buildOpenApiDocument } from './docs/openapi.js';
+
+// 掛載表：覆蓋率測試與 createApp 共用，避免兩邊各自維護一份路徑
+export const ROUTE_MOUNTS = [
+  ['/health', healthRouter],
+  ['/cards', cardsRouter],
+  // auth 先掛，避免被 /admin 攔截
+  ['/admin/auth', authRouter],
+  ['/admin', adminCardsRouter],
+  ['/admin', adminJobsRouter],
+  ['/admin/import', adminImportRouter],
+];
+
+function shouldEnableApiDocs() {
+  if (process.env.ENABLE_API_DOCS === 'true') return true;
+  if (process.env.ENABLE_API_DOCS === 'false') return false;
+  return process.env.NODE_ENV !== 'production';
+}
 
 export function createApp() {
   const app = express();
@@ -18,15 +37,15 @@ export function createApp() {
   app.use(cors({ origin: origins }));
   app.use(express.json());
 
-  // 公開
-  app.use('/health', healthRouter);
-  app.use('/cards', cardsRouter);
+  for (const [basePath, router] of ROUTE_MOUNTS) {
+    app.use(basePath, router);
+  }
 
-  // 後台（auth 先掛，避免被 /admin 攔截）
-  app.use('/admin/auth', authRouter);
-  app.use('/admin', adminCardsRouter);
-  app.use('/admin', adminJobsRouter);
-  app.use('/admin/import', adminImportRouter);
+  if (shouldEnableApiDocs()) {
+    const openApiDocument = buildOpenApiDocument();
+    app.get('/docs.json', (_req, res) => res.json(openApiDocument));
+    app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
+  }
 
   // 收尾
   app.use(notFoundHandler);
