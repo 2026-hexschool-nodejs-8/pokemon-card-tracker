@@ -1,6 +1,6 @@
 // 測試用 JWT／Admin helper
-// adminAuth middleware 只驗證 JWT 簽章，不查 DB，所以多數路由測試不必真的建立 Admin row，
-// 只有 /admin/auth/login 本身需要真實 Admin（含 hash 密碼）
+// adminAuth middleware 只驗證 JWT 簽章，不查 DB，所以多數受保護路由測試不必真的建立 Admin row。
+// 例外：/admin/auth/login（需 hash 密碼）、/admin/auth/me（會再查 DB 確認帳號仍存在）
 import { prisma } from '@pct/db';
 import { signToken } from '../../src/lib/jwt.js';
 import { hashPassword } from '../../src/lib/password.js';

@@ -101,9 +101,35 @@ test('認證 HTTP', { skip: !dbReachable && '資料庫無法連線' }, async (t)
     assert.equal(res.status, 200);
   });
 
-  await t.test('GET /admin/auth/me － 合法 token → 回傳 admin payload', async () => {
-    const res = await request.get('/admin/auth/me').set('Authorization', makeAuthHeader({ email: 'me@pct.local' }));
+  await t.test('GET /admin/auth/me － 合法 token → 回傳與登入相同的 admin profile', async (t) => {
+    const runId = makeRunId('aume');
+    const { admin } = await createTestAdmin(runId, { email: `${runId}@pct.local` });
+    t.after(() => cleanupTestAdmins(runId));
+
+    const res = await request
+      .get('/admin/auth/me')
+      .set('Authorization', makeAuthHeader({ sub: admin.id, email: admin.email, role: admin.role }));
     assert.equal(res.status, 200);
-    assert.equal(res.body.admin.email, 'me@pct.local');
+    assert.deepEqual(res.body.admin, {
+      id: admin.id,
+      email: admin.email,
+      name: admin.name,
+      role: admin.role,
+    });
+    assert.equal(res.body.admin.passwordHash, undefined);
+    assert.equal(res.body.admin.sub, undefined);
+    assert.equal(res.body.admin.iat, undefined);
+    assert.equal(res.body.admin.exp, undefined);
+  });
+
+  await t.test('GET /admin/auth/me － token 有效但帳號已刪 → 401', async () => {
+    const runId = makeRunId('aume2');
+    const { admin } = await createTestAdmin(runId, { email: `${runId}@pct.local` });
+    const header = makeAuthHeader({ sub: admin.id, email: admin.email, role: admin.role });
+    await cleanupTestAdmins(runId);
+
+    const res = await request.get('/admin/auth/me').set('Authorization', header);
+    assert.equal(res.status, 401);
+    assert.equal(res.body.error, '帳號已失效');
   });
 });
