@@ -1,14 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getCards } from "@/lib/api";
-
-const fmtPrice = (p, c) =>
-  p == null ? "尚未更新" : `${c ?? ""} ${p.toLocaleString()}`;
-const fmtTime = (t) => (t ? new Date(t).toLocaleString("zh-TW") : "—");
-// 後端已回傳整數平均價，前端只加上千分位顯示。
-const fmtAverageTwd = (price) => price.toLocaleString("zh-TW");
-// 依來源數顯示單一來源或多來源平均。
-const fmtSourceLabel = (count) => (count === 1 ? "單一來源" : `${count} 來源平均`);
+import { fmtPrice, fmtSourceLabel, fmtTime } from "@/lib/formatters";
 
 function getBadge(c) {
   if (c.latestPrice != null && c.latestPrice >= 5000) return "💰 高價";
@@ -186,7 +179,7 @@ export default function CardListPage() {
                         className="text-lg font-extrabold mt-2"
                         style={{ color: '#3B4CCA', fontFamily: 'Nunito, sans-serif' }}
                       >
-                        NT$ {fmtAverageTwd(c.averagePriceTwd)}
+                        {fmtPrice(c.averagePriceTwd, 'NT$')}
                         {c.averagePriceSourceCount > 0 && (
                           <span className="ml-2 text-[10px] font-normal text-gray-400">
                             {fmtSourceLabel(c.averagePriceSourceCount)}
