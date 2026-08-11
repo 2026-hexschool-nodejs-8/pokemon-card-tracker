@@ -4,6 +4,7 @@ import { notFound } from '../lib/httpError.js';
 import { logger } from '../lib/logger.js';
 
 const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 10000;
+const AVERAGE_PRICE_MAX_AGE_DAYS = Number(process.env.AVERAGE_PRICE_MAX_AGE_DAYS) || 90;
 
 // 前台列表：支援 keyword（卡名/卡號）、language、grade（condition）
 export async function listCards({ keyword, language, grade } = {}) {
@@ -24,9 +25,9 @@ export async function listCards({ keyword, language, grade } = {}) {
     orderBy: { updatedAt: 'desc' },
   });
 
-  // 列表 API 回傳前，幫每張卡補上查詢時計算出的多來源平均價。
-  // 這樣前端讀取 /cards 時，可直接取得每張卡的 averagePriceTwd 與 averagePriceSourceCount。
-  return attachAveragePriceSummaries(cards);
+  // 列表 API 回傳前，幫每張卡補上查詢時計算出的各來源最新價與多來源平均價。
+  // 這樣前端讀取 /cards 時，可直接取得 latestSourcePrices、averagePriceTwd 與 averagePriceSourceCount。
+  return attachPriceSummaries(cards);
 }
 
 export async function getCardById(id) {
@@ -35,51 +36,87 @@ export async function getCardById(id) {
     include: { sources: { where: { isActive: true } } },
   });
   if (!card) throw notFound('找不到這張卡牌');
-  // 詳情 API 回傳前，補上查詢時計算出的多來源平均價。
-  // 這樣前端讀取 /cards/:id 時，可直接取得 averagePriceTwd 與 averagePriceSourceCount。
-  return attachAveragePriceSummary(card);
+  // 詳情 API 回傳前，幫單張卡補上查詢時計算出的各來源最新價與多來源平均價。
+  // 這樣前端讀取 /cards/:id 時，可直接取得 latestSourcePrices、averagePriceTwd 與 averagePriceSourceCount。
+  return attachPriceSummary(card);
 }
 
 // 多來源平均價：不寫入 Card 欄位，改在查詢卡牌時即時計算給前端顯示。
 // 計算規則：每個啟用來源只取最新一筆有效台幣價，排除可疑價格與換算失敗資料。
 // 沒有任何有效來源價格時，統一回傳前端可判斷的空平均價摘要。
 function buildEmptyAveragePriceSummary() {
-  return { averagePriceTwd: null, averagePriceSourceCount: 0 };
-}
-
-// 將同一張卡的快照整理成平均價摘要：同一來源只採用排序後遇到的第一筆最新價格。
-function summarizeAveragePriceSnapshots(snapshots) {
-  const latestPriceBySource = new Map();
-  for (const snapshot of snapshots) {
-    if (!latestPriceBySource.has(snapshot.sourceId)) {
-      latestPriceBySource.set(snapshot.sourceId, snapshot.priceTwd);
-    }
-  }
-
-  const prices = [...latestPriceBySource.values()].filter(Number.isFinite);
-  if (prices.length === 0) return buildEmptyAveragePriceSummary();
-
-  const average = prices.reduce((sum, value) => sum + value, 0) / prices.length;
   return {
-    // API 直接回傳整數台幣平均價，前端只負責加上千分位顯示。
-    averagePriceTwd: Math.round(average),
-    averagePriceSourceCount: prices.length,
+    averagePriceTwd: null,
+    averagePriceSourceCount: 0,
+    averagePriceMaxAgeDays: AVERAGE_PRICE_MAX_AGE_DAYS,
+    latestSourcePrices: [],
   };
 }
 
-// 批次查詢多張卡的有效快照，避免列表頁為每張卡各查一次資料庫。
-async function getAveragePriceSummaries(cardIds) {
+// 整理前端需要顯示的各來源最新價格欄位。
+function serializeLatestSourcePrice(snapshot, oldestAllowedFetchedAt) {
+  return {
+    sourceId: snapshot.sourceId,
+    provider: snapshot.provider,
+    price: snapshot.price,
+    currency: snapshot.currency,
+    priceTwd: snapshot.priceTwd,
+    rawText: snapshot.rawText,
+    fetchedAt: snapshot.fetchedAt,
+    // 過期價格仍提供前端顯示，但不會參與平均價計算。
+    isStale: new Date(snapshot.fetchedAt) < oldestAllowedFetchedAt,
+  };
+}
+
+// 保留各來源最新價格，但平均價只採用期限內的近期快照。
+function summarizePriceSnapshots(snapshots, oldestAllowedFetchedAt) {
+  const latestSnapshotBySource = new Map();
+  for (const snapshot of snapshots) {
+    if (!latestSnapshotBySource.has(snapshot.sourceId)) {
+      latestSnapshotBySource.set(snapshot.sourceId, snapshot);
+    }
+  }
+
+  const latestSourcePrices = [...latestSnapshotBySource.values()].map((snapshot) =>
+    serializeLatestSourcePrice(snapshot, oldestAllowedFetchedAt),
+  );
+  const prices = latestSourcePrices
+    .filter((snapshot) => !snapshot.isStale)
+    .map((snapshot) => snapshot.priceTwd)
+    .filter(Number.isFinite);
+  if (prices.length === 0) {
+    return { ...buildEmptyAveragePriceSummary(), latestSourcePrices };
+  }
+
+  const average = prices.reduce((sum, value) => sum + value, 0) / prices.length;
+  return {
+    // API 直接回傳整數台幣平均價，前端只負責格式化顯示。
+    averagePriceTwd: Math.round(average),
+    averagePriceSourceCount: prices.length,
+    averagePriceMaxAgeDays: AVERAGE_PRICE_MAX_AGE_DAYS,
+    latestSourcePrices,
+  };
+}
+
+// 批次載入有效快照，避免列表頁為每張卡各查一次資料庫。
+async function getPriceSummaries(cardIds) {
   const uniqueCardIds = [...new Set(cardIds)].filter(Boolean);
   if (uniqueCardIds.length === 0) return new Map();
+  const oldestAllowedFetchedAt = new Date(Date.now() - AVERAGE_PRICE_MAX_AGE_DAYS * DAY_MS);
 
-  // 每張卡、每個來源只取最新一筆有效台幣價，避免把全部歷史價格撈回來。
+  // 每個來源都保留最後一筆有效價格供前端顯示；是否納入平均價會在摘要階段依期限判斷。
   const snapshots = await prisma.$queryRaw`
-    SELECT "cardId", "sourceId", "priceTwd"
+    SELECT "cardId", "sourceId", "provider", "price", "currency", "priceTwd", "rawText", "fetchedAt"
     FROM (
       SELECT
         ps."cardId",
         ps."sourceId",
+        ps."provider",
+        ps."price",
+        ps."currency",
         ps."priceTwd",
+        ps."rawText",
+        ps."fetchedAt",
         ROW_NUMBER() OVER (
           PARTITION BY ps."cardId", ps."sourceId"
           ORDER BY ps."fetchedAt" DESC, ps."createdAt" DESC, ps."id" DESC
@@ -105,31 +142,31 @@ async function getAveragePriceSummaries(cardIds) {
   return new Map(
     uniqueCardIds.map((cardId) => [
       cardId,
-      summarizeAveragePriceSnapshots(snapshotsByCardId.get(cardId) ?? []),
+      summarizePriceSnapshots(snapshotsByCardId.get(cardId) ?? [], oldestAllowedFetchedAt),
     ]),
   );
 }
 
-// 單張卡平均價查詢：沿用批次查詢邏輯，保持列表與詳情頁計算規則一致。
-async function getAveragePriceSummary(cardId) {
-  const summaries = await getAveragePriceSummaries([cardId]);
+// 單張卡價格摘要查詢：沿用批次查詢邏輯，保持列表與詳情頁計算規則一致。
+async function getPriceSummary(cardId) {
+  const summaries = await getPriceSummaries([cardId]);
   return summaries.get(cardId) ?? buildEmptyAveragePriceSummary();
 }
 
-// 將平均價摘要附加到卡牌列表中的每張卡，提供 /cards API 回傳給前端使用。
-async function attachAveragePriceSummaries(cards) {
-  const summaries = await getAveragePriceSummaries(cards.map((card) => card.id));
+// 將價格摘要附加到每張卡，提供 /cards API 回傳給前端使用。
+async function attachPriceSummaries(cards) {
+  const summaries = await getPriceSummaries(cards.map((card) => card.id));
   return cards.map((card) => ({
     ...card,
     ...(summaries.get(card.id) ?? buildEmptyAveragePriceSummary()),
   }));
 }
 
-// 將平均價摘要附加到單張卡，提供 /cards/:id API 回傳給前端使用。
-async function attachAveragePriceSummary(card) {
+// 將價格摘要附加到單張卡，提供 /cards/:id API 回傳給前端使用。
+async function attachPriceSummary(card) {
   return {
     ...card,
-    ...(await getAveragePriceSummary(card.id)),
+    ...(await getPriceSummary(card.id)),
   };
 }
 

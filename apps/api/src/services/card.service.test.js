@@ -93,29 +93,41 @@ test('card.service', { skip: !dbReachable && '資料庫無法連線' }, async (t
       const sourceB = await createSource(card.id, { provider: runId + '-mockCrawler' });
       t.after(() => cleanupByRunId(runId));
 
+      const now = Date.now();
       await createSnapshot(card.id, sourceA.id, {
         provider: sourceA.provider,
         price: 100,
         priceTwd: 100,
-        fetchedAt: new Date('2026-08-01T00:00:00Z'),
+        fetchedAt: new Date(now - 2 * 60 * 60 * 1000),
       });
       await createSnapshot(card.id, sourceA.id, {
         provider: sourceA.provider,
         price: 300,
         priceTwd: 300,
-        fetchedAt: new Date('2026-08-02T00:00:00Z'),
+        fetchedAt: new Date(now - 60 * 60 * 1000),
       });
       await createSnapshot(card.id, sourceB.id, {
         provider: sourceB.provider,
         price: 501,
         priceTwd: 501,
-        fetchedAt: new Date('2026-08-02T00:00:00Z'),
+        fetchedAt: new Date(now),
       });
 
       const result = await getCardById(card.id);
 
       assert.equal(result.averagePriceTwd, 401);
       assert.equal(result.averagePriceSourceCount, 2);
+      assert.equal(result.averagePriceMaxAgeDays, 90);
+      assert.deepEqual(
+        result.latestSourcePrices.map((sourcePrice) => ({
+          provider: sourcePrice.provider,
+          priceTwd: sourcePrice.priceTwd,
+        })),
+        [
+          { provider: sourceA.provider, priceTwd: 300 },
+          { provider: sourceB.provider, priceTwd: 501 },
+        ],
+      );
     });
 
     await t.test('多來源平均價排除無效價格資料', async (t) => {
@@ -153,6 +165,72 @@ test('card.service', { skip: !dbReachable && '資料庫無法連線' }, async (t
 
       assert.equal(result.averagePriceTwd, 200);
       assert.equal(result.averagePriceSourceCount, 1);
+      assert.equal(result.latestSourcePrices.length, 1);
+      assert.equal(result.latestSourcePrices[0].provider, validSource.provider);
+    });
+
+    await t.test('平均價排除過期來源，但仍保留各來源最後價格供前端顯示', async (t) => {
+      const runId = makeRunId('avg03');
+      const card = await createCard(runId);
+      const freshSource = await createSource(card.id, { provider: runId + '-fresh' });
+      const staleSource = await createSource(card.id, { provider: runId + '-stale' });
+      const dayMs = 24 * 60 * 60 * 1000;
+      t.after(() => cleanupByRunId(runId));
+
+      await createSnapshot(card.id, freshSource.id, {
+        provider: freshSource.provider,
+        price: 200,
+        priceTwd: 200,
+        fetchedAt: new Date(Date.now() - dayMs),
+      });
+      await createSnapshot(card.id, staleSource.id, {
+        provider: staleSource.provider,
+        price: 1000,
+        priceTwd: 1000,
+        fetchedAt: new Date(Date.now() - 120 * dayMs),
+      });
+
+      const result = await getCardById(card.id);
+
+      assert.equal(result.averagePriceTwd, 200);
+      assert.equal(result.averagePriceSourceCount, 1);
+      assert.deepEqual(result.latestSourcePrices.map((sourcePrice) => sourcePrice.provider), [
+        freshSource.provider,
+        staleSource.provider,
+      ]);
+      assert.deepEqual(result.latestSourcePrices.map((sourcePrice) => sourcePrice.isStale), [
+        false,
+        true,
+      ]);
+    });
+
+    await t.test('所有來源皆過期時回傳空平均價，並保留已過期的來源價格', async (t) => {
+      const runId = makeRunId('avg04');
+      const card = await createCard(runId);
+      const staleOnlySource = await createSource(card.id, {
+        provider: runId + '-stale-only',
+      });
+      const dayMs = 24 * 60 * 60 * 1000;
+      t.after(() => cleanupByRunId(runId));
+
+      await createSnapshot(card.id, staleOnlySource.id, {
+        provider: staleOnlySource.provider,
+        price: 800,
+        priceTwd: 800,
+        fetchedAt: new Date(Date.now() - 120 * dayMs),
+      });
+
+      const result = await getCardById(card.id);
+
+      assert.equal(result.averagePriceTwd, null);
+      assert.equal(result.averagePriceSourceCount, 0);
+      assert.equal(result.averagePriceMaxAgeDays, 90);
+      assert.equal(result.latestSourcePrices.length, 1);
+      assert.equal(result.latestSourcePrices[0].isStale, true);
+      assert.deepEqual(
+        result.latestSourcePrices.map((sourcePrice) => sourcePrice.provider),
+        [staleOnlySource.provider],
+      );
     });
 
     await t.test('不存在 → notFound (404)', async () => {
