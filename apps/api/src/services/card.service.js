@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { Prisma, prisma } from '@pct/db';
-import { notFound } from '../lib/httpError.js';
+import { notFound, conflict } from '../lib/httpError.js';
 import { logger } from '../lib/logger.js';
 
 const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 10000;
@@ -12,7 +12,9 @@ export async function listCards({ keyword, language, grade } = {}) {
     where: {
       isActive: true,
       ...(language ? { language } : {}),
-      ...(grade ? { condition: grade } : {}),
+      // grade 比照 keyword 用 contains + 大小寫不敏感：完全相等比對會讓使用者打到一半就看到「查無資料」，
+      // 而且 condition 的大小寫在資料面沒有統一（raw / PSA10），相等比對連打完整都可能落空
+      ...(grade ? { condition: { contains: grade, mode: 'insensitive' } } : {}),
       ...(keyword
         ? {
             OR: [
@@ -28,6 +30,107 @@ export async function listCards({ keyword, language, grade } = {}) {
   // 列表 API 回傳前，幫每張卡補上查詢時計算出的各來源最新價與多來源平均價。
   // 這樣前端讀取 /cards 時，可直接取得 latestSourcePrices、averagePriceTwd 與 averagePriceSourceCount。
   return attachPriceSummaries(cards);
+}
+
+// 後台列表（cursor 分頁，供無限滾動）：沿用 keyword/language/grade/isActive 篩選，
+// 加 cursor（上一批最後一張卡 id）+ limit（預設 20、上限 50）。
+//
+// orderBy 以 createdAt desc 為主、id desc 為次鍵（createdAt 可能同毫秒重複，補 id 作穩定次鍵）。
+// 排序鍵刻意「不」用 updatedAt：Prisma 的 cursor 是拿該筆的當前值去定位，而本頁的開關操作
+// 與抓價 job 都會改寫 updatedAt，被改的卡會跳到排序最前 → 游標定位錯位 → 後續批次重複或遺漏。
+// createdAt 建立後不再變動，往前掃描的分頁才不會漏掉「跳到掃描位置前面」的資料。
+// limit 預設 20：route 端有 Zod .default(20) 把關，但 service 是 export 的，
+// 直接呼叫時沒有預設值會變成 take: undefined（撈全表）且 nextCursor 恆為 null
+export async function adminListCards({
+  keyword,
+  language,
+  grade,
+  isActive,
+  cursor,
+  limit = 20,
+} = {}) {
+  const cards = await prisma.card.findMany({
+    where: {
+      ...(isActive !== undefined ? { isActive } : {}),
+      ...(language ? { language } : {}),
+      // grade 比照 keyword 用 contains + 大小寫不敏感：完全相等比對會讓使用者打到一半就看到「查無資料」，
+      // 而且 condition 的大小寫在資料面沒有統一（raw / PSA10），相等比對連打完整都可能落空
+      ...(grade ? { condition: { contains: grade, mode: 'insensitive' } } : {}),
+      ...(keyword
+        ? {
+            OR: [
+              { name: { contains: keyword, mode: 'insensitive' } },
+              { cardNumber: { contains: keyword, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    include: { _count: { select: { sources: true } } },
+    take: limit,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+  });
+  // 拿滿一批（length === limit）代表可能還有下一批 → 回最後一張卡 id 當游標；否則已到底
+  const nextCursor = cards.length === limit ? cards[cards.length - 1].id : null;
+  return { data: cards, nextCursor };
+}
+
+// 交易連動：關閉「最後一個啟用來源」→ 同一交易內同時停用來源與其所屬卡片（FR-015/FR-016）。
+// 先防呆守衛（該來源須為其卡片唯一啟用來源），不成立則整筆不變更並丟 409（FR-016）。
+// 任一步失敗整筆 rollback。client 參數預設 prisma，僅供測試注入（模擬 rollback）。
+export async function deactivateLastSource(sourceId, client = prisma) {
+  return client.$transaction(async (tx) => {
+    const source = await tx.priceSource.findUnique({ where: { id: sourceId } });
+    if (!source) throw notFound('找不到這個來源');
+
+    // 防呆守衛：計數該卡 isActive=true 的來源，僅當此來源為唯一啟用來源才續行
+    const activeCount = await tx.priceSource.count({
+      where: { cardId: source.cardId, isActive: true },
+    });
+    if (!source.isActive || activeCount !== 1) {
+      throw conflict('此來源並非該卡片最後一個啟用中來源，請重新整理後再試');
+    }
+
+    const updatedSource = await tx.priceSource.update({
+      where: { id: source.id },
+      data: { isActive: false },
+    });
+    const updatedCard = await tx.card.update({
+      where: { id: source.cardId },
+      data: { isActive: false },
+    });
+    return { source: updatedSource, card: updatedCard };
+  });
+}
+
+// 一般來源編輯（PATCH /admin/sources/:id）。若這次要關掉的正好是該卡「最後一個啟用來源」，
+// 擋下來回 409——那條路徑必須走 deactivateLastSource 才會連動停用卡片。
+//
+// 前端是用「展開時抓的來源快取」判斷是不是最後一個，而快取不會重抓；快取過期時就會誤走這條路，
+// 讓卡片停在「追蹤中但沒有任何啟用來源」的不一致狀態（抓價 job 撈不到來源，價格從此不再更新）。
+// 這裡不要求前端做任何補救，擋住即可——重新整理或重進頁面就會拿到最新狀態。
+export async function updateSource(sourceId, data) {
+  return prisma.$transaction(async (tx) => {
+    const source = await tx.priceSource.findUnique({ where: { id: sourceId } });
+    if (!source) throw notFound('找不到這個來源');
+
+    if (source.isActive && data.isActive === false) {
+      // 併發防護（write skew）：兩個請求各關掉同一張卡剩下的兩個來源時，改的是不同 row、
+      // DB 層沒有寫入衝突，兩邊的 count() 會各自讀到 2 而雙雙放行。這裡先鎖住 Card 那一列，
+      // 拿它當「這張卡的來源集合」的代表——目的不是要改 Card，純粹是製造一個共同的排隊點。
+      // 依賴 READ COMMITTED：等到鎖之後，下一個 statement 才會重新取快照讀到新的 count；
+      // 隔離等級若改成 REPEATABLE READ 以上，count() 會沿用交易開頭的舊快照，這個防護會無聲失效。
+      await tx.$queryRaw`SELECT id FROM "Card" WHERE id = ${source.cardId} FOR UPDATE`;
+      const activeCount = await tx.priceSource.count({
+        where: { cardId: source.cardId, isActive: true },
+      });
+      if (activeCount === 1) {
+        throw conflict('這是該卡片最後一個啟用中來源，關閉它會連動停用卡片，請重新整理後再操作');
+      }
+    }
+
+    return tx.priceSource.update({ where: { id: sourceId }, data });
+  });
 }
 
 export async function getCardById(id) {

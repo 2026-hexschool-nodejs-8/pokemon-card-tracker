@@ -5,6 +5,7 @@ import nock from 'nock';
 import { prisma } from '@pct/db';
 import {
   listCards,
+  adminListCards,
   getCardById,
   getCardPriceSummary,
   getCardPrices,
@@ -69,6 +70,37 @@ test('card.service', { skip: !dbReachable && '資料庫無法連線' }, async (t
       const ids = result.map((c) => c.id);
       assert.ok(ids.includes(match.id));
       assert.ok(!ids.includes(noMatch.id));
+    });
+
+    // grade 是使用者一個字一個字打出來的，完全相等比對會讓打到一半變成「查無資料」。
+    // 行為對齊同一列的 keyword 篩選（contains + 大小寫不敏感）
+    await t.test('grade 打到一半就能命中', async (t) => {
+      const runId = makeRunId('cs04b');
+      const card = await createCard(runId, { condition: 'PSA10' });
+      t.after(() => cleanupByRunId(runId));
+
+      const result = await listCards({ grade: 'PSA' });
+      assert.ok(result.some((c) => c.id === card.id));
+    });
+
+    await t.test('grade 大小寫不敏感', async (t) => {
+      const runId = makeRunId('cs04c');
+      const card = await createCard(runId, { condition: 'PSA10' });
+      t.after(() => cleanupByRunId(runId));
+
+      const result = await listCards({ grade: 'psa10' });
+      assert.ok(result.some((c) => c.id === card.id));
+    });
+  });
+
+  await t.test('adminListCards', async (t) => {
+    await t.test('grade 打到一半就能命中', async (t) => {
+      const runId = makeRunId('cs04d');
+      const card = await createCard(runId, { condition: 'PSA10' });
+      t.after(() => cleanupByRunId(runId));
+
+      const { data } = await adminListCards({ grade: 'PSA', limit: 50 });
+      assert.ok(data.some((c) => c.id === card.id));
     });
   });
 
