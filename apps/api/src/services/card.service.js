@@ -2,6 +2,7 @@ import axios from 'axios';
 import { prisma } from '@pct/db';
 import { notFound } from '../lib/httpError.js';
 import { logger } from '../lib/logger.js';
+import { convertToTwd } from '../lib/convertToTwd.js';
 
 const FETCH_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS) || 10000;
 
@@ -61,7 +62,31 @@ export async function getTcgplayerPriceHistory(id, range = 'quarter') {
   const nm = data.result?.find(
     (r) => r.condition === 'Near Mint' && r.variant === 'Normal' && r.language === 'English',
   );
-  return nm ?? data.result?.[0] ?? null;
+  const result = nm ?? data.result?.[0] ?? null;
+  if (!result) return null;
+
+  return { ...result, buckets: await withTwdPrices(result.buckets, id) };
+}
+
+// marketPrice 是美金字串（如 '18.11'）。前台要把它跟台幣線畫在同一條縱軸上就必須換算，
+// 而匯率只存在於後端的 Currency 表 － 這是本功能唯一需要動到後端的原因。
+// 換算失敗一律回 null 而非 throw：外部行情是輔助資訊，不該讓整個端點失敗。
+async function withTwdPrices(buckets, cardId) {
+  if (!Array.isArray(buckets) || buckets.length === 0) return buckets ?? [];
+
+  const usd = await prisma.currency.findUnique({ where: { code: 'USD' } });
+  if (!usd) {
+    // 訊息只進後端 log，不回傳前台 － 訪客對匯率缺漏無從處置，也不該看到內部細節
+    logger.warn(`找不到 USD 匯率，TCGPlayer 市場價無法換算成台幣（cardId=${cardId}）`);
+    return buckets.map((b) => ({ ...b, marketPriceTwd: null }));
+  }
+
+  const rates = new Map([['USD', usd.rateToTwd]]);
+  return buckets.map((b) => {
+    // convertToTwd 已擋掉 <= 0 與非有限值，marketPrice 為 '0' 的 bucket 自然得到 null
+    const { priceTwd } = convertToTwd(Number.parseFloat(b.marketPrice), 'USD', rates);
+    return { ...b, marketPriceTwd: priceTwd };
+  });
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
