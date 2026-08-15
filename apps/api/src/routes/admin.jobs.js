@@ -23,6 +23,8 @@ router.post(
 router.post(
   '/cards/:id/price-sync',
   asyncHandler(async (req, res) => {
+    const card = await prisma.card.findUnique({ where: { id: req.params.id } });
+    if (!card) throw notFound('找不到這張卡牌');
     const job = await runPriceSync({ triggerType: JOB_TRIGGER_TYPE.MANUAL, cardId: req.params.id });
     res.status(202).json({ data: job });
   }),

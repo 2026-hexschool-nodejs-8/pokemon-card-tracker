@@ -79,6 +79,9 @@ router.delete(
 router.post(
   '/cards/:id/sources',
   asyncHandler(async (req, res) => {
+    const card = await prisma.card.findUnique({ where: { id: req.params.id } });
+    if (!card) throw notFound('找不到這張卡牌');
+    
     const data = createSourceSchema.parse(req.body);
     const source = await prisma.priceSource.create({
       data: { ...data, cardId: req.params.id },
