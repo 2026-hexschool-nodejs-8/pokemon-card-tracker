@@ -40,7 +40,7 @@ async function canReachDatabase() {
 }
 
 const dbReachable = await canReachDatabase();
-const app = createApp();
+const app = await createApp();
 const request = supertest(app);
 
 // 每個 productId 對應一份 cardData（讓 scrapeCard 針對不同 id 回不同內容／行為）

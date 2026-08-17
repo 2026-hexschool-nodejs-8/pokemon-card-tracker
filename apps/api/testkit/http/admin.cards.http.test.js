@@ -20,7 +20,7 @@ async function canReachDatabase() {
 }
 
 const dbReachable = await canReachDatabase();
-const app = createApp();
+const app = await createApp();
 const request = supertest(app);
 
 const validSourceBody = {
