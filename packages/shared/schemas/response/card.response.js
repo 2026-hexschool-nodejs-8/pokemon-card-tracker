@@ -22,10 +22,44 @@ export const cardWithSourcesSchema = cardSchema.extend({
   sources: z.array(priceSourceSchema),
 });
 
+export const latestSourcePriceSchema = z.object({
+  sourceId: z.string(),
+  provider: z.string(),
+  price: z.number(),
+  currency: z.string(),
+  priceTwd: z.number().nullable(),
+  rawText: z.string().nullable(),
+  fetchedAt: z.string().datetime(),
+  isStale: z.boolean(),
+});
+
+// 前台列表／詳情在查詢時附加的多來源平均價（不寫入 Card 欄位）
+export const publicCardSchema = cardSchema.extend({
+  averagePriceTwd: z.number().nullable(),
+  averagePriceSourceCount: z.number().int(),
+  averagePriceMaxAgeDays: z.number().int(),
+  latestSourcePrices: z.array(latestSourcePriceSchema),
+});
+
+export const publicCardWithSourcesSchema = publicCardSchema.extend({
+  sources: z.array(priceSourceSchema),
+});
+
 export const adminCardListItemSchema = cardSchema.extend({
   _count: z.object({
     sources: z.number().int(),
   }),
+});
+
+// GET /admin/cards － { data } 信封外加 nextCursor（無下一批時為 null）
+export const adminCardListResponseSchema = z.object({
+  data: z.array(adminCardListItemSchema),
+  nextCursor: z.string().nullable(),
+});
+
+export const deactivateLastSourceResultSchema = z.object({
+  source: priceSourceSchema,
+  card: cardSchema,
 });
 
 export const priceSnapshotSchema = z.object({

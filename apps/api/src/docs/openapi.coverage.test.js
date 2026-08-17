@@ -69,5 +69,5 @@ test('OpenAPI 覆蓋所有已掛載路由（雙向）', () => {
   );
 
   // 鎖住目前的端點數量，避免兩邊同時漏掉卻剛好相等
-  assert.equal(mounted.size, 24, `預期 24 支端點，實際掛載 ${mounted.size}`);
+  assert.equal(mounted.size, 25, `預期 25 支端點，實際掛載 ${mounted.size}`);
 });

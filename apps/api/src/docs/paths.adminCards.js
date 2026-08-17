@@ -5,18 +5,25 @@ import {
   updateSourceSchema,
   listCardsQuerySchema,
   cardSchema,
-  adminCardListItemSchema,
+  adminCardListResponseSchema,
   priceSourceSchema,
   deleteCardResultSchema,
   softDeleteSourceResultSchema,
+  deactivateLastSourceResultSchema,
 } from '@pct/shared';
 import { registry, z, jsonResponse, errorResponses } from './registry.js';
 
 const idParams = z.object({ id: z.string() });
 
-// OpenAPI 友善版：isActive 維持 query 字串 enum，不帶 .transform()
+// OpenAPI 友善版：避開 .transform() / z.coerce（ZodEffects 無法轉 OpenAPI）
 const adminListCardsQueryOpenApi = listCardsQuerySchema.extend({
   isActive: z.enum(['true', 'false']).optional(),
+  cursor: z.string().optional().openapi({
+    description: '上一批最後一張卡的 id（cuid）；不帶則從第一批',
+  }),
+  limit: z.string().optional().openapi({
+    description: '單批數量，預設 20、上限 50',
+  }),
 });
 
 const hardDeleteQuery = z.object({
@@ -29,11 +36,16 @@ registry.registerPath({
   method: 'get',
   path: '/admin/cards',
   tags: ['Admin / Cards'],
-  summary: '後台卡牌列表',
+  summary: '後台卡牌列表（cursor 分頁）',
+  description:
+    '無限滾動用 cursor 分頁。回應為 { data, nextCursor }：nextCursor 為下一批起點，已到底時為 null。',
   security: [{ bearerAuth: [] }],
   request: { query: adminListCardsQueryOpenApi },
   responses: {
-    200: jsonResponse(z.array(adminCardListItemSchema), '含停用卡牌與來源數量'),
+    200: {
+      description: '含停用卡牌與來源數量；加法式 nextCursor（無信封套疊）',
+      content: { 'application/json': { schema: adminCardListResponseSchema } },
+    },
     ...errorResponses([400, 401]),
   },
 });
@@ -116,9 +128,26 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'patch',
+  path: '/admin/sources/{id}/deactivate-last',
+  tags: ['Admin / Cards'],
+  summary: '關閉最後一個啟用來源（連動停用卡片）',
+  description:
+    '僅在該來源確實是該卡最後一個啟用來源時成功；同一交易內停用來源與卡片。守衛不成立回 409。',
+  security: [{ bearerAuth: [] }],
+  request: { params: idParams },
+  responses: {
+    200: jsonResponse(deactivateLastSourceResultSchema, '已停用的來源與卡片'),
+    ...errorResponses([401, 404, 409]),
+  },
+});
+
+registry.registerPath({
+  method: 'patch',
   path: '/admin/sources/{id}',
   tags: ['Admin / Cards'],
   summary: '更新價格來源',
+  description:
+    '若此次要把該卡最後一個啟用來源關掉，請改打 deactivate-last；本路徑會回 409 擋下。',
   security: [{ bearerAuth: [] }],
   request: {
     params: idParams,
@@ -126,7 +155,7 @@ registry.registerPath({
   },
   responses: {
     200: jsonResponse(priceSourceSchema, '更新後的來源'),
-    ...errorResponses([400, 401, 404]),
+    ...errorResponses([400, 401, 404, 409]),
   },
 });
 

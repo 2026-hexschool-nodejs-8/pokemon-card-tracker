@@ -1,8 +1,8 @@
 import {
   listCardsQuerySchema,
   healthSchema,
-  cardSchema,
-  cardWithSourcesSchema,
+  publicCardSchema,
+  publicCardWithSourcesSchema,
   priceSnapshotSchema,
   priceSummarySchema,
   tcgplayerHistorySchema,
@@ -43,7 +43,7 @@ registry.registerPath({
   summary: '查詢卡牌列表',
   request: { query: listCardsQuerySchema },
   responses: {
-    200: jsonResponse(z.array(cardSchema), '卡牌列表'),
+    200: jsonResponse(z.array(publicCardSchema), '卡牌列表（含各來源最新價與平均價）'),
     ...errorResponses([400]),
   },
 });
@@ -55,7 +55,7 @@ registry.registerPath({
   summary: '查詢單張卡牌',
   request: { params: idParams },
   responses: {
-    200: jsonResponse(cardWithSourcesSchema, '卡牌詳情（含啟用中的來源）'),
+    200: jsonResponse(publicCardWithSourcesSchema, '卡牌詳情（含啟用中的來源、各來源最新價與平均價）'),
     ...errorResponses([404]),
   },
 });

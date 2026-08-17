@@ -3,7 +3,7 @@
   "info": {
     "title": "寶可夢卡牌價格追蹤器 API",
     "version": "1.0.0",
-    "description": "公開卡牌查詢與後台管理 API。成功 JSON 回應一律為 { data: T }（/health 除外）；錯誤為 { error, issues? }。後台端點需 Authorization: Bearer <token>。"
+    "description": "公開卡牌查詢與後台管理 API。成功 JSON 回應一律為 { data: T }（/health 除外；GET /admin/cards 另加 nextCursor）；錯誤為 { error, issues? }。後台端點需 Authorization: Bearer <token>。"
   },
   "servers": [
     {
@@ -130,7 +130,7 @@
         ],
         "responses": {
           "200": {
-            "description": "卡牌列表",
+            "description": "卡牌列表（含各來源最新價與平均價）",
             "content": {
               "application/json": {
                 "schema": {
@@ -191,6 +191,61 @@
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "averagePriceTwd": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "averagePriceSourceCount": {
+                            "type": "integer"
+                          },
+                          "averagePriceMaxAgeDays": {
+                            "type": "integer"
+                          },
+                          "latestSourcePrices": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "sourceId": {
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                },
+                                "price": {
+                                  "type": "number"
+                                },
+                                "currency": {
+                                  "type": "string"
+                                },
+                                "priceTwd": {
+                                  "type": "number",
+                                  "nullable": true
+                                },
+                                "rawText": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "fetchedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "isStale": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "sourceId",
+                                "provider",
+                                "price",
+                                "currency",
+                                "priceTwd",
+                                "rawText",
+                                "fetchedAt",
+                                "isStale"
+                              ]
+                            }
                           }
                         },
                         "required": [
@@ -207,7 +262,11 @@
                           "latestPriceTwd",
                           "lastFetchedAt",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "averagePriceTwd",
+                          "averagePriceSourceCount",
+                          "averagePriceMaxAgeDays",
+                          "latestSourcePrices"
                         ]
                       }
                     }
@@ -277,7 +336,7 @@
         ],
         "responses": {
           "200": {
-            "description": "卡牌詳情（含啟用中的來源）",
+            "description": "卡牌詳情（含啟用中的來源、各來源最新價與平均價）",
             "content": {
               "application/json": {
                 "schema": {
@@ -336,6 +395,61 @@
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "averagePriceTwd": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "averagePriceSourceCount": {
+                          "type": "integer"
+                        },
+                        "averagePriceMaxAgeDays": {
+                          "type": "integer"
+                        },
+                        "latestSourcePrices": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "sourceId": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              },
+                              "price": {
+                                "type": "number"
+                              },
+                              "currency": {
+                                "type": "string"
+                              },
+                              "priceTwd": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "rawText": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "fetchedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "isStale": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "sourceId",
+                              "provider",
+                              "price",
+                              "currency",
+                              "priceTwd",
+                              "rawText",
+                              "fetchedAt",
+                              "isStale"
+                            ]
+                          }
                         },
                         "sources": {
                           "type": "array",
@@ -422,6 +536,10 @@
                         "lastFetchedAt",
                         "createdAt",
                         "updatedAt",
+                        "averagePriceTwd",
+                        "averagePriceSourceCount",
+                        "averagePriceMaxAgeDays",
+                        "latestSourcePrices",
                         "sources"
                       ]
                     }
@@ -1355,7 +1473,8 @@
         "tags": [
           "Admin / Cards"
         ],
-        "summary": "後台卡牌列表",
+        "summary": "後台卡牌列表（cursor 分頁）",
+        "description": "無限滾動用 cursor 分頁。回應為 { data, nextCursor }：nextCursor 為下一批起點，已到底時為 null。",
         "security": [
           {
             "bearerAuth": []
@@ -1402,11 +1521,29 @@
             "required": false,
             "name": "isActive",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "上一批最後一張卡的 id（cuid）；不帶則從第一批"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "單批數量，預設 20、上限 50"
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
           }
         ],
         "responses": {
           "200": {
-            "description": "含停用卡牌與來源數量",
+            "description": "含停用卡牌與來源數量；加法式 nextCursor（無信封套疊）",
             "content": {
               "application/json": {
                 "schema": {
@@ -1498,10 +1635,15 @@
                           "_count"
                         ]
                       }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
-                    "data"
+                    "data",
+                    "nextCursor"
                   ]
                 }
               }
@@ -2688,12 +2830,309 @@
         }
       }
     },
+    "/admin/sources/{id}/deactivate-last": {
+      "patch": {
+        "tags": [
+          "Admin / Cards"
+        ],
+        "summary": "關閉最後一個啟用來源（連動停用卡片）",
+        "description": "僅在該來源確實是該卡最後一個啟用來源時成功；同一交易內停用來源與卡片。守衛不成立回 409。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已停用的來源與卡片",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "cardId": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "api",
+                                "crawler"
+                              ]
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "externalId": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "currency": {
+                              "type": "string"
+                            },
+                            "isActive": {
+                              "type": "boolean"
+                            },
+                            "lastSuccessAt": {
+                              "type": "string",
+                              "nullable": true,
+                              "format": "date-time"
+                            },
+                            "lastError": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "updatedAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "cardId",
+                            "type",
+                            "provider",
+                            "url",
+                            "externalId",
+                            "currency",
+                            "isActive",
+                            "lastSuccessAt",
+                            "lastError",
+                            "createdAt",
+                            "updatedAt"
+                          ]
+                        },
+                        "card": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "cardNumber": {
+                              "type": "string"
+                            },
+                            "setName": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "language": {
+                              "type": "string"
+                            },
+                            "condition": {
+                              "type": "string"
+                            },
+                            "imageUrl": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "isActive": {
+                              "type": "boolean"
+                            },
+                            "latestPrice": {
+                              "type": "number",
+                              "nullable": true
+                            },
+                            "latestCurrency": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "latestPriceTwd": {
+                              "type": "number",
+                              "nullable": true
+                            },
+                            "lastFetchedAt": {
+                              "type": "string",
+                              "nullable": true,
+                              "format": "date-time"
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "updatedAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "cardNumber",
+                            "setName",
+                            "language",
+                            "condition",
+                            "imageUrl",
+                            "isActive",
+                            "latestPrice",
+                            "latestCurrency",
+                            "latestPriceTwd",
+                            "lastFetchedAt",
+                            "createdAt",
+                            "updatedAt"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "source",
+                        "card"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未授權",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "找不到資源",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "衝突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/sources/{id}": {
       "patch": {
         "tags": [
           "Admin / Cards"
         ],
         "summary": "更新價格來源",
+        "description": "若此次要把該卡最後一個啟用來源關掉，請改打 deactivate-last；本路徑會回 409 擋下。",
         "security": [
           {
             "bearerAuth": []
@@ -2900,6 +3339,42 @@
           },
           "404": {
             "description": "找不到資源",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "衝突",
             "content": {
               "application/json": {
                 "schema": {

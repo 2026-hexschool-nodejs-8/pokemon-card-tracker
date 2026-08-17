@@ -16,7 +16,7 @@ export function buildOpenApiDocument() {
       title: '寶可夢卡牌價格追蹤器 API',
       version: '1.0.0',
       description:
-        '公開卡牌查詢與後台管理 API。成功 JSON 回應一律為 { data: T }（/health 除外）；錯誤為 { error, issues? }。後台端點需 Authorization: Bearer <token>。',
+        '公開卡牌查詢與後台管理 API。成功 JSON 回應一律為 { data: T }（/health 除外；GET /admin/cards 另加 nextCursor）；錯誤為 { error, issues? }。後台端點需 Authorization: Bearer <token>。',
     },
     servers: [{ url: 'http://localhost:3000', description: '本機開發' }],
   });
