@@ -12,33 +12,19 @@ import {
 import { adminAuth } from '../middleware/adminAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { notFound } from '../lib/httpError.js';
+import { adminListCards, deactivateLastSource, updateSource } from '../services/card.service.js';
 
 const router = Router();
 router.use(adminAuth);
 
-// GET /admin/cards?keyword=&language=&grade=&isActive=true|false
+// GET /admin/cards?keyword=&language=&grade=&isActive=true|false&cursor=&limit=
+// cursor 分頁供無限滾動；回應加法式新增 nextCursor（無更多為 null）
 router.get(
   '/cards',
   asyncHandler(async (req, res) => {
-    const { keyword, language, grade, isActive } = adminListCardsQuerySchema.parse(req.query);
-    const cards = await prisma.card.findMany({
-      where: {
-        ...(isActive !== undefined ? { isActive } : {}),
-        ...(language ? { language } : {}),
-        ...(grade ? { condition: grade } : {}),
-        ...(keyword
-          ? {
-              OR: [
-                { name: { contains: keyword, mode: 'insensitive' } },
-                { cardNumber: { contains: keyword, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: { updatedAt: 'desc' },
-      include: { _count: { select: { sources: true } } },
-    });
-    res.json({ data: cards });
+    const params = adminListCardsQuerySchema.parse(req.query);
+    const { data, nextCursor } = await adminListCards(params);
+    res.json({ data, nextCursor });
   }),
 );
 
@@ -115,12 +101,23 @@ router.delete(
   }),
 );
 
+// PATCH /admin/sources/:id/deactivate-last － 關閉「最後一個啟用來源」（交易連動停用來源 + 卡片）
+// 僅在前端確認 modal 通過後呼叫；防呆守衛不成立回 409，任一步失敗整筆 rollback（FR-015/FR-016）
+router.patch(
+  '/sources/:id/deactivate-last',
+  asyncHandler(async (req, res) => {
+    const data = await deactivateLastSource(req.params.id);
+    res.json({ data });
+  }),
+);
+
 // PATCH /admin/sources/:id － 編輯價格來源
+// 關掉「最後一個啟用來源」須改走上面的 deactivate-last（會連動停用卡片），這裡回 409 擋下
 router.patch(
   '/sources/:id',
   asyncHandler(async (req, res) => {
     const data = updateSourceSchema.parse(req.body);
-    const source = await prisma.priceSource.update({ where: { id: req.params.id }, data });
+    const source = await updateSource(req.params.id, data);
     res.json({ data: source });
   }),
 );

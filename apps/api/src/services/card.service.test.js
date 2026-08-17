@@ -5,6 +5,7 @@ import nock from 'nock';
 import { prisma } from '@pct/db';
 import {
   listCards,
+  adminListCards,
   getCardById,
   getCardPriceSummary,
   getCardPrices,
@@ -70,6 +71,37 @@ test('card.service', { skip: !dbReachable && '資料庫無法連線' }, async (t
       assert.ok(ids.includes(match.id));
       assert.ok(!ids.includes(noMatch.id));
     });
+
+    // grade 是使用者一個字一個字打出來的，完全相等比對會讓打到一半變成「查無資料」。
+    // 行為對齊同一列的 keyword 篩選（contains + 大小寫不敏感）
+    await t.test('grade 打到一半就能命中', async (t) => {
+      const runId = makeRunId('cs04b');
+      const card = await createCard(runId, { condition: 'PSA10' });
+      t.after(() => cleanupByRunId(runId));
+
+      const result = await listCards({ grade: 'PSA' });
+      assert.ok(result.some((c) => c.id === card.id));
+    });
+
+    await t.test('grade 大小寫不敏感', async (t) => {
+      const runId = makeRunId('cs04c');
+      const card = await createCard(runId, { condition: 'PSA10' });
+      t.after(() => cleanupByRunId(runId));
+
+      const result = await listCards({ grade: 'psa10' });
+      assert.ok(result.some((c) => c.id === card.id));
+    });
+  });
+
+  await t.test('adminListCards', async (t) => {
+    await t.test('grade 打到一半就能命中', async (t) => {
+      const runId = makeRunId('cs04d');
+      const card = await createCard(runId, { condition: 'PSA10' });
+      t.after(() => cleanupByRunId(runId));
+
+      const { data } = await adminListCards({ grade: 'PSA', limit: 50 });
+      assert.ok(data.some((c) => c.id === card.id));
+    });
   });
 
   await t.test('getCardById', async (t) => {
@@ -84,6 +116,153 @@ test('card.service', { skip: !dbReachable && '資料庫無法連線' }, async (t
       const sourceIds = result.sources.map((s) => s.id);
       assert.ok(sourceIds.includes(activeSource.id));
       assert.ok(!sourceIds.includes(inactiveSource.id));
+    });
+
+    await t.test('多來源平均價只取各來源最新有效價格，並四捨五入為整數', async (t) => {
+      const runId = makeRunId('avg01');
+      const card = await createCard(runId);
+      const sourceA = await createSource(card.id, { provider: runId + '-mockApi' });
+      const sourceB = await createSource(card.id, { provider: runId + '-mockCrawler' });
+      t.after(() => cleanupByRunId(runId));
+
+      const now = Date.now();
+      await createSnapshot(card.id, sourceA.id, {
+        provider: sourceA.provider,
+        price: 100,
+        priceTwd: 100,
+        fetchedAt: new Date(now - 2 * 60 * 60 * 1000),
+      });
+      await createSnapshot(card.id, sourceA.id, {
+        provider: sourceA.provider,
+        price: 300,
+        priceTwd: 300,
+        fetchedAt: new Date(now - 60 * 60 * 1000),
+      });
+      await createSnapshot(card.id, sourceB.id, {
+        provider: sourceB.provider,
+        price: 501,
+        priceTwd: 501,
+        fetchedAt: new Date(now),
+      });
+
+      const result = await getCardById(card.id);
+
+      assert.equal(result.averagePriceTwd, 401);
+      assert.equal(result.averagePriceSourceCount, 2);
+      assert.equal(result.averagePriceMaxAgeDays, 90);
+      assert.deepEqual(
+        result.latestSourcePrices.map((sourcePrice) => ({
+          provider: sourcePrice.provider,
+          priceTwd: sourcePrice.priceTwd,
+        })),
+        [
+          { provider: sourceA.provider, priceTwd: 300 },
+          { provider: sourceB.provider, priceTwd: 501 },
+        ],
+      );
+    });
+
+    await t.test('多來源平均價排除無效價格資料', async (t) => {
+      const runId = makeRunId('avg02');
+      const card = await createCard(runId);
+      const validSource = await createSource(card.id, { provider: runId + '-valid' });
+      const nullPriceSource = await createSource(card.id, { provider: runId + '-null-price' });
+      const suspiciousSource = await createSource(card.id, { provider: runId + '-suspicious' });
+      const inactiveSource = await createSource(card.id, { provider: runId + '-inactive', isActive: false });
+      t.after(() => cleanupByRunId(runId));
+
+      await createSnapshot(card.id, validSource.id, {
+        provider: validSource.provider,
+        price: 200,
+        priceTwd: 200,
+      });
+      await createSnapshot(card.id, nullPriceSource.id, {
+        provider: nullPriceSource.provider,
+        price: 300,
+        priceTwd: null,
+      });
+      await createSnapshot(card.id, suspiciousSource.id, {
+        provider: suspiciousSource.provider,
+        price: 999,
+        priceTwd: 999,
+        isSuspicious: true,
+      });
+      await createSnapshot(card.id, inactiveSource.id, {
+        provider: inactiveSource.provider,
+        price: 888,
+        priceTwd: 888,
+      });
+
+      const result = await getCardById(card.id);
+
+      assert.equal(result.averagePriceTwd, 200);
+      assert.equal(result.averagePriceSourceCount, 1);
+      assert.equal(result.latestSourcePrices.length, 1);
+      assert.equal(result.latestSourcePrices[0].provider, validSource.provider);
+    });
+
+    await t.test('平均價排除過期來源，但仍保留各來源最後價格供前端顯示', async (t) => {
+      const runId = makeRunId('avg03');
+      const card = await createCard(runId);
+      const freshSource = await createSource(card.id, { provider: runId + '-fresh' });
+      const staleSource = await createSource(card.id, { provider: runId + '-stale' });
+      const dayMs = 24 * 60 * 60 * 1000;
+      t.after(() => cleanupByRunId(runId));
+
+      await createSnapshot(card.id, freshSource.id, {
+        provider: freshSource.provider,
+        price: 200,
+        priceTwd: 200,
+        fetchedAt: new Date(Date.now() - dayMs),
+      });
+      await createSnapshot(card.id, staleSource.id, {
+        provider: staleSource.provider,
+        price: 1000,
+        priceTwd: 1000,
+        fetchedAt: new Date(Date.now() - 120 * dayMs),
+      });
+
+      const result = await getCardById(card.id);
+
+      assert.equal(result.averagePriceTwd, 200);
+      assert.equal(result.averagePriceSourceCount, 1);
+      assert.deepEqual(result.latestSourcePrices.map((sourcePrice) => sourcePrice.provider), [
+        freshSource.provider,
+        staleSource.provider,
+      ]);
+      assert.deepEqual(result.latestSourcePrices.map((sourcePrice) => sourcePrice.isStale), [
+        false,
+        true,
+      ]);
+    });
+
+    await t.test('所有來源皆過期時回傳空平均價，並保留已過期的來源價格', async (t) => {
+      const runId = makeRunId('avg04');
+      const card = await createCard(runId);
+      const staleOnlySource = await createSource(card.id, {
+        provider: runId + '-stale-only',
+      });
+      const dayMs = 24 * 60 * 60 * 1000;
+      t.after(() => cleanupByRunId(runId));
+
+      await createSnapshot(card.id, staleOnlySource.id, {
+        provider: staleOnlySource.provider,
+        price: 800,
+        priceTwd: 800,
+        fetchedAt: new Date(Date.now() - 120 * dayMs),
+      });
+
+      const result = await getCardById(card.id);
+
+      assert.equal(result.averagePriceTwd, null);
+      assert.equal(result.averagePriceSourceCount, 0);
+      assert.equal(result.averagePriceMaxAgeDays, 90);
+      assert.equal(result.latestSourcePrices.length, 1);
+      assert.equal(result.latestSourcePrices[0].isStale, true);
+      assert.deepEqual(
+        result.latestSourcePrices.map((sourcePrice) => sourcePrice.provider),
+        [staleOnlySource.provider],
+      );
     });
 
     await t.test('不存在 → notFound (404)', async () => {

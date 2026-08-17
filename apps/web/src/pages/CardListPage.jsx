@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getCards } from "@/lib/api";
-
-const fmtPrice = (p, c) =>
-  p == null ? "尚未更新" : `${c ?? ""} ${p.toLocaleString()}`;
-const fmtTime = (t) => (t ? new Date(t).toLocaleString("zh-TW") : "—");
+import { fmtPrice, fmtSourceLabel, fmtTime } from "@/lib/formatters";
 
 function getBadge(c) {
   if (c.latestPrice != null && c.latestPrice >= 5000) return "💰 高價";
@@ -176,18 +173,19 @@ export default function CardListPage() {
                     <p className="text-xs text-gray-400">
                       {c.language} / {c.condition}
                     </p>
-                    {c.latestPriceTwd != null ? (
-                      <>
-                        <p
-                          className="text-lg font-extrabold mt-2"
-                          style={{ color: '#3B4CCA', fontFamily: 'Nunito, sans-serif' }}
-                        >
-                          NT$ {c.latestPriceTwd.toLocaleString()}
-                        </p>
-                        <p className="text-[10px] text-gray-400">
-                          原幣 {fmtPrice(c.latestPrice, c.latestCurrency)}
-                        </p>
-                      </>
+                    {/* 顯示後端查詢時計算出的多來源平均價。 */}
+                    {c.averagePriceTwd != null ? (
+                      <p
+                        className="text-lg font-extrabold mt-2"
+                        style={{ color: '#3B4CCA', fontFamily: 'Nunito, sans-serif' }}
+                      >
+                        {fmtPrice(c.averagePriceTwd, 'NT$')}
+                        {c.averagePriceSourceCount > 0 && (
+                          <span className="ml-2 text-[10px] font-normal text-gray-400">
+                            {fmtSourceLabel(c.averagePriceSourceCount)}
+                          </span>
+                        )}
+                      </p>
                     ) : (
                       <p
                         className="text-lg font-extrabold mt-2"
