@@ -213,10 +213,10 @@ async function main() {
   });
   const src3Us = card3.sources[0];
 
-  // ── 卡4：ヒトカゲ（不足 7 天）──
+  // ── 卡4：コイキング（不足 7 天）──
   const card4 = await prisma.card.create({
     data: {
-      name: 'ヒトカゲ',
+      name: 'コイキング',
       cardNumber: '004/BS',
       setName: 'Base Set',
       language: 'ja',
@@ -313,6 +313,7 @@ async function main() {
 
   let bulkSourceCount = 0;
   const pricedBulk = []; // 之後要灌快照與最新價摘要的卡
+  const bulkLiveSources = []; // 啟用卡上的啟用來源，給 job log 用
 
   for (const [i, name] of BULK_NAMES.entries()) {
     const language = LANGS[i % LANGS.length];
@@ -350,6 +351,17 @@ async function main() {
     });
 
     bulkSourceCount += sourceCount;
+    if (isActive) {
+      for (const source of card.sources) {
+        bulkLiveSources.push({
+          card,
+          source,
+          ok: true,
+          price: 500 + i * 137,
+          currency: source.currency,
+        });
+      }
+    }
     // 每 4 張留 1 張「從未抓過價」，讓摘要列的「—」空狀態有資料可看
     if (sourceCount > 0 && i % 4 !== 3) {
       pricedBulk.push({ card, source: card.sources[0], base: 500 + i * 137, index: i });
@@ -565,25 +577,39 @@ async function main() {
   console.log('✅ 對齊卡片 latestPrice / latestCurrency / latestPriceTwd / lastFetchedAt');
 
   // ── Job 與 Log（4 筆）──
-  // live 啟用來源：src1Jp, src1Jp2, src2Tw, src4Jp, src5Eu（5 個）
-  // 註：批次卡的來源也是啟用的 mockApi / mockCrawler，現場跑 job:once 撈到的來源數會遠多於 5，
-  //     跟這裡寫死的歷史 job 數字對不上，demo 時直接看這 4 筆即可。
+  // live = 啟用卡上的啟用來源：主角 5 + 批次 23 = 28。
+  // log 筆數、totalSources、successCount / failedCount 都從同一份清單推導，避免再對不上。
   const liveSources = [
     { card: card1, source: src1Jp, ok: true, price: 28000, currency: 'JPY' },
     { card: card1, source: src1Jp2, ok: true, price: 30000, currency: 'JPY' },
     { card: card2, source: src2Tw, ok: true, price: 4000, currency: 'TWD' },
     { card: card4, source: src4Jp, ok: true, price: 4500, currency: 'JPY' },
     { card: card5, source: src5Eu, ok: false },
+    ...bulkLiveSources,
   ];
   const liveOk = liveSources.filter((s) => s.ok);
-  // success job 那時卡5 尚未加入 → 4 個
-  const beforeCard5 = liveOk;
+  // success job 那時卡5 尚未加入
+  const beforeCard5 = liveSources.filter((s) => s.source.id !== src5Eu.id);
 
   function successMsg({ price, currency }) {
     const twd = toTwd(price, currency);
     return `抓價成功 ${currency} ${price} ≈ TWD ${twd}`;
   }
   const failMsg = 'mock crawler 找不到價格 selector（頁面可能改版）';
+
+  function makeLogs(entries, startedAt, stepMs, mode) {
+    return entries.map((s, i) => {
+      const failed = mode === 'allFailed' || (mode === 'mixed' && !s.ok);
+      return {
+        cardId: s.card.id,
+        sourceId: s.source.id,
+        status: failed ? 'failed' : 'success',
+        message: failed ? (s.ok ? 'HTTP 429 rate limited' : failMsg) : successMsg(s),
+        durationMs: mode === 'allFailed' ? 5000 : s.ok ? 220 + i * 30 : 4800,
+        createdAt: new Date(startedAt.getTime() + (i + 1) * stepMs),
+      };
+    });
+  }
 
   // 1) running（25 分鐘前，卡住）
   const runningJob = await prisma.priceFetchJob.create({
@@ -592,7 +618,7 @@ async function main() {
       status: 'running',
       startedAt: new Date(Date.now() - 25 * 60_000),
       finishedAt: null,
-      totalSources: 5,
+      totalSources: liveSources.length,
       successCount: 0,
       failedCount: 0,
     },
@@ -607,18 +633,11 @@ async function main() {
       status: 'success',
       startedAt: successStarted,
       finishedAt: successFinished,
-      totalSources: 4,
-      successCount: 4,
+      totalSources: beforeCard5.length,
+      successCount: beforeCard5.length,
       failedCount: 0,
       logs: {
-        create: beforeCard5.map((s, i) => ({
-          cardId: s.card.id,
-          sourceId: s.source.id,
-          status: 'success',
-          message: successMsg(s),
-          durationMs: 200 + i * 40,
-          createdAt: new Date(successStarted.getTime() + (i + 1) * 500),
-        })),
+        create: makeLogs(beforeCard5, successStarted, 500, 'success'),
       },
     },
   });
@@ -632,18 +651,11 @@ async function main() {
       status: 'partial_success',
       startedAt: partialStarted,
       finishedAt: partialFinished,
-      totalSources: 5,
-      successCount: 4,
-      failedCount: 1,
+      totalSources: liveSources.length,
+      successCount: liveOk.length,
+      failedCount: liveSources.length - liveOk.length,
       logs: {
-        create: liveSources.map((s, i) => ({
-          cardId: s.card.id,
-          sourceId: s.source.id,
-          status: s.ok ? 'success' : 'failed',
-          message: s.ok ? successMsg(s) : failMsg,
-          durationMs: s.ok ? 220 + i * 30 : 4800,
-          createdAt: new Date(partialStarted.getTime() + (i + 1) * 600),
-        })),
+        create: makeLogs(liveSources, partialStarted, 600, 'mixed'),
       },
     },
   });
@@ -659,28 +671,23 @@ async function main() {
       status: 'failed',
       startedAt: failedStarted,
       finishedAt: failedFinished,
-      totalSources: 5,
+      totalSources: liveSources.length,
       successCount: 0,
-      failedCount: 5,
+      failedCount: liveSources.length,
       errorMessage: '來源回傳 429 Too Many Requests',
       logs: {
-        create: liveSources.map((s, i) => ({
-          cardId: s.card.id,
-          sourceId: s.source.id,
-          status: 'failed',
-          message: s.ok ? 'HTTP 429 rate limited' : failMsg,
-          durationMs: 5000,
-          createdAt: new Date(failedStarted.getTime() + (i + 1) * 700),
-        })),
+        create: makeLogs(liveSources, failedStarted, 700, 'allFailed'),
       },
     },
   });
 
   console.log(
-    `✅ 建立 4 筆 job：running=${runningJob.id.slice(-6)}, success=${successJob.id.slice(-6)}, ` +
-      `partial=${partialJob.id.slice(-6)}, failed=${failedJob.id.slice(-6)}`,
+    `✅ 建立 4 筆 job：running=${runningJob.id.slice(-6)} (${liveSources.length} 來源), ` +
+      `success=${successJob.id.slice(-6)} (${beforeCard5.length} log), ` +
+      `partial=${partialJob.id.slice(-6)} (${liveSources.length} log), ` +
+      `failed=${failedJob.id.slice(-6)} (${liveSources.length} log)`,
   );
-  
+
   console.log('🎉 Seed 完成');
 }
 

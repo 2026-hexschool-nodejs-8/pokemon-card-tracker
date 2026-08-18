@@ -11,7 +11,7 @@
 | 1 | リザードン VMAX (SSR) | ja | PSA10 | Shiny Star V | 高價 badge、上漲、超過 30 天、多來源（兩條都啟用） |
 | 2 | ミライドン ex | zh | raw | SV4a 黑炎的支配者 | 稀有 badge（sv）、下跌、7~29 天、多來源（一條中斷） |
 | 3 | ピカチュウ V | en | PSA9 | XY Promo | 持平、7~29 天、停用 USD 來源 |
-| 4 | ヒトカゲ | ja | raw | Base Set | 不足 7 天（趨勢顯示 —） |
+| 4 | コイキング | ja | raw | Base Set | 不足 7 天（趨勢顯示 —） |
 | 5 | ミュウツー GX | ja | raw | Sun & Moon | 尚未抓價、無圖、失敗來源（EUR / fail） |
 | 6 | フシギバナ EX | en | raw | EX Series | 關閉追蹤（isActive: false），保留歷史 |
 
@@ -50,7 +50,7 @@
 - [x] 5 個不同的幣別來源（TWD / JPY / HKD / USD / EUR）
 - [x] 1 張卡牌有多來源，並有多來源趨勢線 → 卡1（兩條都啟用）、卡2（一條中斷）
 
-Live 抓價會撈到 5 個啟用來源：卡1×2 + 卡2 TWD + 卡4 + 卡5 fail → 4 成功 1 失敗 = partial_success。
+Live 抓價會撈到 28 個啟用來源：主角 5（卡1×2 + 卡2 TWD + 卡4 + 卡5 fail）+ 批次卡 23 → 27 成功 1 失敗 = partial_success。
 
 ---
 
@@ -96,10 +96,10 @@ Live 抓價會撈到 5 個啟用來源：卡1×2 + 卡2 TWD + 卡4 + 卡5 fail �
 
 | status | trigger | totalSources | success / failed | log 筆數 | 用途 |
 |--------|---------|--------------|------------------|----------|------|
-| running | manual | 5 | 0 / 0 | 0 | 「清除卡住的任務」按鈕 |
-| success | cron | 4 | 4 / 0 | 4 | 那時卡5 尚未加入 |
-| partial_success | cron | 5 | 4 / 1 | 5 | 卡5 fail 來源 |
-| failed | manual | 5 | 0 / 5 | 5 | 全失敗 + errorMessage |
+| running | manual | 28 | 0 / 0 | 0 | 「清除卡住的任務」按鈕 |
+| success | cron | 27 | 27 / 0 | 27 | 那時卡5 尚未加入 |
+| partial_success | cron | 28 | 27 / 1 | 28 | 卡5 fail 來源 |
+| failed | manual | 28 | 0 / 28 | 28 | 全失敗 + errorMessage |
 
 - [x] 1 筆成功 job
 - [x] 1 筆失敗 job
