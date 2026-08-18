@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { Info } from 'lucide-react';
 import {
   ComposedChart,
   LineChart,
@@ -20,8 +21,7 @@ import {
 } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-
-const fmtTime = (t) => (t ? new Date(t).toLocaleString('zh-TW') : '—');
+import { fmtPrice, fmtSourceLabel, fmtTime } from '@/lib/formatters';
 
 const RANGES = [
   ['1M', 'month'],
@@ -54,6 +54,29 @@ function ChangeBadge({ label, change }) {
     >
       {label} {arrow} {up ? '+' : ''}
       {change.pct}%
+    </span>
+  );
+}
+
+// 平均價規則改放在可互動提示框，避免長說明文字打斷主要價格資訊。
+function AveragePriceInfo({ maxAgeDays }) {
+  return (
+    <span className="group relative ml-1 inline-flex align-middle">
+      <button
+        type="button"
+        aria-label={`查看平均價計算規則：僅計入近 ${maxAgeDays} 天內有更新的來源`}
+        aria-describedby="average-price-policy"
+        className="inline-flex rounded-full text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Info className="h-4 w-4" aria-hidden="true" />
+      </button>
+      <span
+        id="average-price-policy"
+        role="tooltip"
+        className="pointer-events-none invisible absolute left-1/2 top-full z-20 mt-2 w-64 -translate-x-1/2 rounded-md bg-slate-900 px-3 py-2 text-left text-xs font-normal leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+      >
+        平均價僅計入近 {maxAgeDays} 天內有更新的來源。過期來源仍會列在下方，但不參與平均計算。
+      </span>
     </span>
   );
 }
@@ -103,6 +126,14 @@ export default function CardDetailPage() {
 
   if (error) return <p className="text-destructive">{error}</p>;
   if (!card) return <p className="text-muted-foreground">載入中…</p>;
+
+  const latestSourcePrices = card.latestSourcePrices ?? [];
+  const averagePriceMaxAgeDays = card.averagePriceMaxAgeDays ?? 90;
+  // 有來源價格但沒有平均價，代表所有有效來源價格都已超過後端設定的採用期限。
+  const hasOnlyStaleSourcePrices =
+    card.averagePriceTwd == null &&
+    latestSourcePrices.length > 0 &&
+    latestSourcePrices.every((sourcePrice) => sourcePrice.isStale);
 
   const historyChartData = (history?.buckets ?? [])
     .slice()
@@ -189,18 +220,29 @@ export default function CardDetailPage() {
                 </Button>
               </div>
               {csvError && <p className="text-sm text-destructive">{csvError}</p>}
-              {card.latestPriceTwd != null ? (
-                <>
-                  <p className="text-3xl font-bold">NT$ {card.latestPriceTwd.toLocaleString()}</p>
+              {/* 顯示後端查詢時計算出的多來源平均價。 */}
+              {card.averagePriceTwd != null ? (
+                <p className="text-3xl font-bold">
+                  {fmtPrice(card.averagePriceTwd, 'NT$')}
+                  {card.averagePriceSourceCount > 0 && (
+                    <span className="ml-3 align-middle text-sm font-medium text-muted-foreground">
+                      {fmtSourceLabel(card.averagePriceSourceCount)}
+                      <AveragePriceInfo maxAgeDays={averagePriceMaxAgeDays} />
+                    </span>
+                  )}
+                </p>
+              ) : hasOnlyStaleSourcePrices ? (
+                <div>
+                  <p className="text-3xl font-bold">暫無近期平均價</p>
                   <p className="text-sm text-muted-foreground">
-                    原幣 {card.latestCurrency} {card.latestPrice?.toLocaleString()}
+                    所有來源價格皆已超過 {averagePriceMaxAgeDays} 天
                   </p>
-                </>
+                </div>
               ) : (
                 <p className="text-3xl font-bold">
                   {card.latestPrice == null
                     ? '尚未更新價格'
-                    : `${card.latestCurrency} ${card.latestPrice.toLocaleString()}`}
+                    : fmtPrice(card.latestPrice, card.latestCurrency)}
                 </p>
               )}
               {summary && (
@@ -226,6 +268,50 @@ export default function CardDetailPage() {
               })()}
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+
+      {/* 各來源最新價格區塊：明確呈現 API 回傳的每個來源最新有效價格。 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>各來源最新價格</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {latestSourcePrices.length === 0 ? (
+            <p className="text-sm text-muted-foreground">尚無有效來源價格</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="py-2">來源</th>
+                    <th>價格</th>
+                    <th>台幣</th>
+                    <th>更新時間</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {latestSourcePrices.map((sourcePrice) => (
+                    <tr key={sourcePrice.sourceId} className="border-b">
+                      <td className="py-2">
+                        {sourcePrice.provider}
+                        {/* 過期來源仍保留最後價格，但明確提醒使用者它未參與近期平均。 */}
+                        {sourcePrice.isStale && (
+                          <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                            已過期
+                          </span>
+                        )}
+                      </td>
+                      <td>{fmtPrice(sourcePrice.price, sourcePrice.currency)}</td>
+                      <td>{sourcePrice.priceTwd != null ? fmtPrice(sourcePrice.priceTwd, 'NT$') : '-'}</td>
+                      <td className="text-muted-foreground">{fmtTime(sourcePrice.fetchedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
 

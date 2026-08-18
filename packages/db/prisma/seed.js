@@ -1,7 +1,8 @@
 // Seed 資料 － DEMO 備援（demo 卡牌 / 價格 / job / 匯率，不含 Admin）
 // 執行：npm run db:seed（從根目錄）
 // 註：Admin 已獨立成 seedAdmin.js（本專案無註冊功能），此腳本不建也不刪 Admin。
-// 設計說明見 .cursor/seed_data_plan.md
+// 主角卡（6 張）的設計說明見 docs/seed_data_plan.md；
+// 批次卡（25 張）純粹是給後台總覽頁的無限滾動 / 篩選 / 空狀態湊資料量。
 import '@pct/shared/load-env';
 import { prisma } from '../index.js';
 
@@ -75,7 +76,7 @@ function priceAt(base, factor) {
 }
 
 async function main() {
-  console.log('🌱 開始 seed（DEMO 備援）...');
+  console.log('🌱 開始 seed...');
 
   // ── 清空 demo 資料（方便重複執行）；Admin / Currency 不動（Currency 用 upsert）──
   await prisma.priceFetchLog.deleteMany();
@@ -292,7 +293,72 @@ async function main() {
   });
   const src6Jp = card6.sources[0];
 
-  console.log('✅ 建立 6 張卡牌、8 個來源');
+  console.log('✅ 建立 6 張主角卡牌、8 個來源');
+
+  // ── 批次卡牌 ──
+  // 後台總覽頁每批載入 20 張，卡片總數要超過 20 才看得到「捲到底接續載入第二批」。
+  // 這裡補 25 張湊到 31 張，並讓語言 / 狀態別 / 追蹤狀態 / 來源數量都有變化，
+  // 好讓篩選、來源數量欄位、「尚無來源」空狀態都有資料可驗。
+  // 屬性一律由索引推導而非亂數，重跑 seed 結果才會一致。
+  const BULK_NAMES = [
+    'ヒトカゲ', 'ゼニガメ', 'フシギダネ', 'イーブイ', 'ミミッキュ',
+    'ゲンガー', 'カビゴン', 'ラプラス', 'ギャラドス', 'サーナイト',
+    'ルカリオ', 'ガブリアス', 'レックウザ', 'ミュウ', 'セレビィ',
+    'ジラーチ', 'デオキシス', 'ダークライ', 'アルセウス', 'ゾロアーク',
+    'ゼクロム', 'レシラム', 'キュレム', 'ゼラオラ', 'マギアナ',
+  ];
+  const LANGS = ['ja', 'en', 'zh'];
+  const CURRENCY_BY_LANG = { ja: 'JPY', en: 'USD', zh: 'TWD' };
+  const CONDITIONS = ['raw', 'PSA9', 'PSA10'];
+
+  let bulkSourceCount = 0;
+  const pricedBulk = []; // 之後要灌快照與最新價摘要的卡
+
+  for (const [i, name] of BULK_NAMES.entries()) {
+    const language = LANGS[i % LANGS.length];
+    const currency = CURRENCY_BY_LANG[language];
+    // 每 7 張安排 1 張停用，讓「僅停用」篩選有東西可看
+    const isActive = i % 7 !== 6;
+    // 來源數量輪流 2 / 1 / 1 / 1 / 0，0 用來驗「尚無來源」空狀態
+    const sourceCount = i % 5 === 4 ? 0 : i % 3 === 0 ? 2 : 1;
+
+    const card = await prisma.card.create({
+      data: {
+        name,
+        cardNumber: `${String(i + 1).padStart(3, '0')}/BULK`,
+        setName: `Demo Set ${Math.floor(i / 5) + 1}`,
+        language,
+        condition: CONDITIONS[i % CONDITIONS.length],
+        isActive,
+        imageUrl: `https://placehold.co/240x336?text=${encodeURIComponent(name)}`,
+        // 後台列表按 createdAt 倒序，批次卡的建立時間往前推，主角卡才會固定留在第一批
+        createdAt: new Date(Date.now() - (BULK_NAMES.length - i + 1) * DAY_MS),
+        sources: {
+          create: Array.from({ length: sourceCount }, (_, s) =>
+            s % 2 === 0
+              ? { type: 'api', provider: 'mockApi', externalId: `bulk-${i}-${s}`, currency }
+              : {
+                  type: 'crawler',
+                  provider: 'mockCrawler',
+                  url: `https://example.com/cards/bulk-${i}-${s}`,
+                  currency,
+                },
+          ),
+        },
+      },
+      include: { sources: true },
+    });
+
+    bulkSourceCount += sourceCount;
+    // 每 4 張留 1 張「從未抓過價」，讓摘要列的「—」空狀態有資料可看
+    if (sourceCount > 0 && i % 4 !== 3) {
+      pricedBulk.push({ card, source: card.sources[0], base: 500 + i * 137, index: i });
+    }
+  }
+
+  console.log(
+    `✅ 建立 ${BULK_NAMES.length} 張批次卡牌（共 ${bulkSourceCount} 個來源），卡牌總數 ${6 + BULK_NAMES.length} 張`,
+  );
 
   // ── 快照序列 ──
   // 卡1：35 天，start→end 讓近 7 日 ≈ +6%、近 30 日 ≈ +18%
@@ -438,8 +504,27 @@ async function main() {
     daysAgoList: days6,
   });
 
+  const heroSnapshotCount = snapshots.length;
+
+  // 批次卡：目的只是讓摘要列的最新價 / 最後更新時間有值，不是畫趨勢圖，各灌 3 天就好。
+  // 起始係數同樣由索引推導，重跑 seed 價格才不會變。
+  for (const { card, source, base, index } of pricedBulk) {
+    pushSeries({
+      card,
+      source,
+      base,
+      currency: source.currency,
+      type: source.type,
+      factors: buildFactors(3, 0.94 + (index % 5) * 0.02, 1.0),
+      daysAgoList: [0, 1, 2],
+    });
+  }
+
   await prisma.priceSnapshot.createMany({ data: snapshots });
-  console.log(`✅ 建立 ${snapshots.length} 筆歷史價格快照`);
+  console.log(
+    `✅ 建立 ${snapshots.length} 筆歷史價格快照（主角卡 ${heroSnapshotCount} 筆、` +
+      `批次卡 ${snapshots.length - heroSnapshotCount} 筆 / ${pricedBulk.length} 張有最新價）`,
+  );
 
   // ── 對齊卡片摘要（取該卡最新快照；卡1 取 demoShopJp）──
   function latestOf(cardId, preferSourceId) {
@@ -473,10 +558,16 @@ async function main() {
   await syncCardSummary(card4, src4Jp.id);
   // 卡5：無快照，摘要保持 null
   await syncCardSummary(card6, src6Jp.id);
+  // 批次卡走同一條路徑，latestPriceTwd 才不會缺（前台列表以台幣為主顯示）
+  for (const { card, source } of pricedBulk) {
+    await syncCardSummary(card, source.id);
+  }
   console.log('✅ 對齊卡片 latestPrice / latestCurrency / latestPriceTwd / lastFetchedAt');
 
   // ── Job 與 Log（4 筆）──
   // live 啟用來源：src1Jp, src1Jp2, src2Tw, src4Jp, src5Eu（5 個）
+  // 註：批次卡的來源也是啟用的 mockApi / mockCrawler，現場跑 job:once 撈到的來源數會遠多於 5，
+  //     跟這裡寫死的歷史 job 數字對不上，demo 時直接看這 4 筆即可。
   const liveSources = [
     { card: card1, source: src1Jp, ok: true, price: 28000, currency: 'JPY' },
     { card: card1, source: src1Jp2, ok: true, price: 30000, currency: 'JPY' },
@@ -589,24 +680,7 @@ async function main() {
     `✅ 建立 4 筆 job：running=${runningJob.id.slice(-6)}, success=${successJob.id.slice(-6)}, ` +
       `partial=${partialJob.id.slice(-6)}, failed=${failedJob.id.slice(-6)}`,
   );
-
-  // 驗證漲跌幅關鍵點（方便確認講稿數字）
-  const c1TodayPrice = snapshots.find(
-    (s) => s.sourceId === src1Jp.id && s.fetchedAt.getTime() === atCronHour(0).getTime(),
-  );
-  const c1Day7 = snapshots.find(
-    (s) => s.sourceId === src1Jp.id && s.fetchedAt.getTime() === atCronHour(7).getTime(),
-  );
-  const c1Day30 = snapshots.find(
-    (s) => s.sourceId === src1Jp.id && s.fetchedAt.getTime() === atCronHour(30).getTime(),
-  );
-  if (c1TodayPrice && c1Day7 && c1Day30) {
-    const pct7 = Math.round(((c1TodayPrice.priceTwd - c1Day7.priceTwd) / c1Day7.priceTwd) * 10000) / 100;
-    const pct30 =
-      Math.round(((c1TodayPrice.priceTwd - c1Day30.priceTwd) / c1Day30.priceTwd) * 10000) / 100;
-    console.log(`   卡1 漲跌：近7日 ${pct7}%｜近30日 ${pct30}%`);
-  }
-
+  
   console.log('🎉 Seed 完成');
 }
 

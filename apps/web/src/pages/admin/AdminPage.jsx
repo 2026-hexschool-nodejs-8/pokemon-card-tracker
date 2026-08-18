@@ -6,6 +6,7 @@ import { adminCreateCard, adminAddSource, adminSyncAll, adminGetJobs, adminImpor
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { fmtTime } from '@/lib/formatters';
 
 const emptyForm = {
   name: '',
@@ -20,7 +21,6 @@ const emptyForm = {
   currency: 'JPY',
 };
 
-const fmtTime = (t) => (t ? new Date(t).toLocaleString('zh-TW') : '—');
 
 export default function AdminPage() {
   const navigate = useNavigate();

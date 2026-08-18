@@ -34,3 +34,10 @@ logs/
 USAGE.md
 爬蟲
 specification.md
+
+# Spec Kit 工具本體不進版控（specs/ 產出的文件要保留）
+.specify/
+.claude/skills/speckit-*/
+
+# MCP 暫存
+.playwright-mcp/
