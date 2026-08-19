@@ -4,6 +4,7 @@ import { prisma } from '@pct/db';
 import { JOB_TRIGGER_TYPE, JOB_STATUS } from '@pct/shared';
 import { adminAuth } from '../middleware/adminAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { notFound } from '../lib/httpError.js';
 import { runPriceSync } from '../services/priceSync.service.js';
 
 const router = Router();
@@ -22,6 +23,8 @@ router.post(
 router.post(
   '/cards/:id/price-sync',
   asyncHandler(async (req, res) => {
+    const card = await prisma.card.findUnique({ where: { id: req.params.id } });
+    if (!card) throw notFound('找不到這張卡牌');
     const job = await runPriceSync({ triggerType: JOB_TRIGGER_TYPE.MANUAL, cardId: req.params.id });
     res.status(202).json({ data: job });
   }),
@@ -60,7 +63,7 @@ router.get(
       where: { id: req.params.id },
       include: { logs: { orderBy: { createdAt: 'asc' } } },
     });
-    if (!job) return res.status(404).json({ error: '找不到這個 job' });
+    if (!job) throw notFound('找不到這個 job');
     res.json({ data: job });
   }),
 );

@@ -119,7 +119,7 @@ export default function AdminPage() {
     setMsg('');
     setSearchResult(null);
     try {
-      const data = await adminSearchImportTcgplayer(searchName.trim(), searchLimit);
+      const { data } = await adminSearchImportTcgplayer(searchName.trim(), searchLimit);
       setSearchResult(data);
       setMsg(data.message ?? `「${data.searchName}」搜尋完成：成功 ${data.imported}、略過 ${data.skipped}、失敗 ${data.failed}`);
       loadJobs();
@@ -136,7 +136,7 @@ export default function AdminPage() {
     setMsg('');
     setImportResult(null);
     try {
-      const data = await adminImportTcgplayer(importPage, importLimit);
+      const { data } = await adminImportTcgplayer(importPage, importLimit);
       setImportResult(data);
       setMsg(`匯入完成：成功 ${data.imported}、略過 ${data.skipped}、失敗 ${data.failed}`);
       loadJobs();

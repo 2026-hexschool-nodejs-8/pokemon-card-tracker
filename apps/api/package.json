@@ -12,6 +12,7 @@
     "currency:once": "node src/scripts/runCurrencySyncOnce.js"
   },
   "dependencies": {
+    "@asteasolutions/zod-to-openapi": "7.3.4",
     "@pct/db": "*",
     "@pct/shared": "*",
     "axios": "^1.18.1",
@@ -21,7 +22,9 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
-    "playwright": "^1.61.1"
+    "playwright": "^1.61.1",
+    "swagger-ui-express": "^5.0.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "nock": "^14.0.17",

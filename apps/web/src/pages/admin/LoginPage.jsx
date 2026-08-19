@@ -18,8 +18,8 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      const { token } = await login(email, password);
-      setToken(token);
+      const { data } = await login(email, password);
+      setToken(data.token);
       navigate('/admin');
     } catch (err) {
       setError(err.message);

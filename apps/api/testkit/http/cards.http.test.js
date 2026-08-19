@@ -20,7 +20,7 @@ async function canReachDatabase() {
 }
 
 const dbReachable = await canReachDatabase();
-const app = createApp();
+const app = await createApp();
 const request = supertest(app);
 
 test('前台公開 API HTTP', { skip: !dbReachable && '資料庫無法連線' }, async (t) => {
