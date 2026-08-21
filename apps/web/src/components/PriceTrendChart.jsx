@@ -60,8 +60,10 @@ function useTcgMarketHistory(cardId, days) {
   useEffect(() => {
     if (!cardId) return undefined;
 
-    if (range in cacheRef.current) {
-      setBuckets(cacheRef.current[range]);
+    // key 必須含 cardId：同路由換卡時元件不會卸載，只用 range 會把前一張卡的行情畫上去
+    const cacheKey = `${cardId}|${range}`;
+    if (cacheKey in cacheRef.current) {
+      setBuckets(cacheRef.current[cacheKey]);
       return undefined;
     }
 
@@ -71,7 +73,7 @@ function useTcgMarketHistory(cardId, days) {
       // 外部來源失敗是可接受狀態：少一條線，其餘照常呈現（FR-016）
       .catch(() => null)
       .then((result) => {
-        cacheRef.current[range] = result;
+        cacheRef.current[cacheKey] = result;
         if (!cancelled) setBuckets(result);
       });
 
@@ -189,6 +191,10 @@ export default function PriceTrendChart({ cardId, prices = [] }) {
   // 90 個點 × 多條線會糊成一片，長區間只留線
   const showDots = days <= 30;
 
+  // 空狀態要分辨「換算不出台幣」與「這段期間沒抓到價」－ 兩者對使用者的意義完全不同，
+  // 混為一談會讓訪客以為系統壞了，其實只是要往前看更長的區間。
+  const hasAnyTwd = prices.some((p) => p.priceTwd !== null && p.priceTwd !== undefined);
+
   return (
     <Card>
       <CardHeader>
@@ -216,11 +222,15 @@ export default function PriceTrendChart({ cardId, prices = [] }) {
       <CardContent>
         {prices.length === 0 ? (
           <p className="text-muted-foreground">尚無價格紀錄</p>
-        ) : series.length === 0 ? (
+        ) : !hasAnyTwd ? (
           // 有快照但一筆都換算不出台幣。訊息寫給前台訪客看 －
           // 他們無法對匯率缺漏做任何處置，維運細節留在主控台。
           <p className="text-muted-foreground">
             價格資料暫時無法以台幣呈現，請稍後再回來查看。原始價格仍可在下方歷史價格中檢視。
+          </p>
+        ) : series.length === 0 ? (
+          <p className="text-muted-foreground">
+            這段期間沒有價格紀錄，試試看更長的區間。
           </p>
         ) : (
           <ResponsiveContainer width="100%" height={320}>
@@ -244,7 +254,7 @@ export default function PriceTrendChart({ cardId, prices = [] }) {
                     dataKey={s.key}
                     name={s.label}
                     stroke={color}
-                    // recharts 內建圖例會把這個值帶進 icon，所以圖例上也看得到線型（FR-030）
+                    // 線型是顏色之外的第二個編碼；圖例由 TrendLegend 讀同一個值畫出對應樣式
                     strokeDasharray={LINE_DASHES[i % LINE_DASHES.length]}
                     strokeWidth={2}
                     connectNulls

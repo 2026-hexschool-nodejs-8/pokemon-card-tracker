@@ -4,7 +4,6 @@
 // 主角卡（6 張）的設計說明見 docs/seed_data_plan.md；
 // 批次卡（25 張）純粹是給後台總覽頁的無限滾動 / 篩選 / 空狀態湊資料量。
 import '@pct/shared/load-env';
-import { SUPPORTED_CURRENCIES, BASE_CURRENCY } from '@pct/shared';
 import { prisma } from '../index.js';
 
 // ── 固定匯率（同一份用於快照 priceTwd、卡片 latestPriceTwd、Currency upsert）──
