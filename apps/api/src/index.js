@@ -6,7 +6,7 @@ import { logger } from './lib/logger.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 
-const app = createApp();
+const app = await createApp();
 
 const server = app.listen(PORT, () => {
   logger.info(`🚀 API 已啟動：http://localhost:${PORT}`);

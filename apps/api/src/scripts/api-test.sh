@@ -38,7 +38,7 @@ assert_status "POST /admin/auth/login 密碼錯誤" 401 "$STATUS"
 
 LOGIN=$(curl -s -X POST "$BASE_URL/admin/auth/login" \
   -H 'Content-Type: application/json' -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
-TOKEN=$(echo "$LOGIN" | json '.token')
+TOKEN=$(echo "$LOGIN" | json '.data.token')
 if [[ -z "$TOKEN" || "$TOKEN" == "undefined" ]]; then
   echo "❌ 登入失敗，中止：$LOGIN"; exit 1
 fi

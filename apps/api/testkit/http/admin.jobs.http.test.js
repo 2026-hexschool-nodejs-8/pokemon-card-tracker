@@ -34,7 +34,7 @@ async function canReachDatabase() {
 }
 
 const dbReachable = await canReachDatabase();
-const app = createApp();
+const app = await createApp();
 const request = supertest(app);
 
 test('Admin Jobs HTTP', { skip: !dbReachable && '資料庫無法連線' }, async (t) => {
@@ -89,6 +89,17 @@ test('Admin Jobs HTTP', { skip: !dbReachable && '資料庫無法連線' }, async
     assert.equal(res.status, 202);
     assert.equal(res.body.data.totalSources, 1);
     await prisma.priceFetchJob.delete({ where: { id: res.body.data.id } }).catch(() => {});
+  });
+
+  await t.test('POST /admin/cards/:id/price-sync － 卡牌不存在 → 404，不建立 job', async () => {
+    const before = await prisma.priceFetchJob.count();
+    const res = await request
+      .post('/admin/cards/does-not-exist/price-sync')
+      .set('Authorization', makeAuthHeader());
+
+    assert.equal(res.status, 404);
+    assert.equal(res.body.error, '找不到這張卡牌');
+    assert.equal(await prisma.priceFetchJob.count(), before);
   });
 
   await t.test('GET /admin/jobs － 未帶 token → 401', async () => {

@@ -26,6 +26,7 @@
     "test:web": "node --test \"apps/web/src/**/*.test.js\"",
     "test:cov": "npm run test:cov -w @pct/api",
     "currency:once": "npm run currency:once -w @pct/api",
+    "docs:openapi": "node apps/api/src/scripts/genOpenApi.js",
     "postinstall": "prisma generate --schema=packages/db/prisma/schema.prisma"
   },
   "devDependencies": {

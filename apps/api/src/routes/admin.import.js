@@ -218,11 +218,12 @@ router.post(
     const productIds = await getProductIds(page);
     const targets = productIds.slice(0, limit);
     const summary = await importProductIds(targets);
-    res.json(summary);
+    res.json({ data: summary });
   }),
 );
 
 // ── POST /admin/import/tcgplayer/search ── 依卡名搜尋並匯入
+// 搜不到時不建立 job，但仍回傳與有結果時相同的欄位（jobId / message 恆存在），呼叫端只需處理一種形狀
 router.post(
   '/tcgplayer/search',
   asyncHandler(async (req, res) => {
@@ -232,11 +233,21 @@ router.post(
     const targets = productIds.slice(0, limit);
 
     if (targets.length === 0) {
-      return res.json({ imported: 0, skipped: 0, failed: 0, results: [], message: `找不到「${name}」相關卡牌` });
+      return res.json({
+        data: {
+          imported: 0,
+          skipped: 0,
+          failed: 0,
+          results: [],
+          jobId: null,
+          searchName: name,
+          message: `找不到「${name}」相關卡牌`,
+        },
+      });
     }
 
     const summary = await importProductIds(targets);
-    res.json({ ...summary, searchName: name });
+    res.json({ data: { ...summary, searchName: name, message: null } });
   }),
 );
 
