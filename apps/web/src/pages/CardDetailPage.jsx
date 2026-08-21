@@ -9,6 +9,7 @@ import {
 } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import PriceTrendChart from '@/components/PriceTrendChart';
 import { fmtPrice, fmtSourceLabel, fmtTime } from '@/lib/formatters';
 
 // 產生瀏覽器下載用的 CSV 檔名，避開常見檔名保留字元
@@ -104,33 +105,6 @@ export default function CardDetailPage() {
     card.averagePriceTwd == null &&
     latestSourcePrices.length > 0 &&
     latestSourcePrices.every((sourcePrice) => sourcePrice.isStale);
-
-  const historyChartData = (history?.buckets ?? [])
-    .slice()
-    .reverse()
-    .map((b) => ({
-      date: new Date(b.bucketStartDate).toLocaleDateString('en-US', {
-        month: 'numeric',
-        day: 'numeric',
-      }),
-      price: parseFloat(b.marketPrice) || null,
-      volume: parseInt(b.quantitySold) || 0,
-    }));
-
-  const pctChange = (() => {
-    const buckets = history?.buckets ?? [];
-    if (buckets.length < 2) return null;
-    const latest = parseFloat(buckets[0].marketPrice);
-    const oldest = parseFloat(buckets[buckets.length - 1].marketPrice);
-    if (!oldest) return null;
-    return ((latest - oldest) / oldest * 100).toFixed(2);
-  })();
-
-  const twdChartData = prices.map((p) => ({
-    date: new Date(p.fetchedAt).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }),
-    priceTwd: p.priceTwd, // 舊快照可能是 null，connectNulls 會跨過缺值
-  }));
-  const hasTwd = twdChartData.some((d) => d.priceTwd !== null);
 
   // 用 fetch 取回 CSV blob，避免匯出失敗時整頁離開 SPA
   async function downloadCsv() {
@@ -281,94 +255,6 @@ export default function CardDetailPage() {
                 </tbody>
               </table>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <CardTitle>市場價格歷史</CardTitle>
-              {history && (
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-lg font-semibold">
-                    Near Mint ${parseFloat(history.buckets[0]?.marketPrice ?? 0).toFixed(2)}
-                  </span>
-                  {pctChange !== null && (
-                    <span
-                      className={`text-sm font-medium ${
-                        Number(pctChange) >= 0 ? 'text-green-600' : 'text-red-600'
-                      }`}
-                    >
-                      ({Number(pctChange) >= 0 ? '+' : ''}{pctChange}%)
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="flex gap-1 text-sm">
-              {RANGES.map(([label, val]) => (
-                <button
-                  key={val}
-                  onClick={() => setRange(val)}
-                  className={`px-3 py-1 rounded font-medium transition-colors ${
-                    range === val
-                      ? 'bg-foreground text-background'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {historyLoading ? (
-            <div className="h-[280px] flex items-center justify-center text-muted-foreground">
-              載入中…
-            </div>
-          ) : historyChartData.length === 0 ? (
-            <p className="text-muted-foreground">此卡牌無 TCGPlayer 歷史資料</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <ComposedChart data={historyChartData} margin={{ top: 4, right: 40, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis
-                  yAxisId="price"
-                  orientation="left"
-                  width={65}
-                  tickFormatter={(v) => `$${v.toFixed(2)}`}
-                  tick={{ fontSize: 11 }}
-                />
-                <YAxis
-                  yAxisId="volume"
-                  orientation="right"
-                  width={40}
-                  tick={{ fontSize: 11 }}
-                  allowDecimals={false}
-                />
-                <Tooltip
-                  formatter={(value, name) =>
-                    name === 'price'
-                      ? [`$${Number(value).toFixed(2)}`, 'Market Price']
-                      : [value, '成交量']
-                  }
-                />
-                <Bar yAxisId="volume" dataKey="volume" fill="#BFDBFE" radius={[2, 2, 0, 0]} />
-                <Line
-                  yAxisId="price"
-                  type="monotone"
-                  dataKey="price"
-                  stroke="#3B82F6"
-                  strokeWidth={2}
-                  dot={false}
-                  connectNulls
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
           )}
         </CardContent>
       </Card>
