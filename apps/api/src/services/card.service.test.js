@@ -504,6 +504,78 @@ test('card.service', { skip: !dbReachable && '資料庫無法連線' }, async (t
       const result = await getTcgplayerPriceHistory(card.id);
       assert.equal(result, null);
     });
+
+    // marketPrice 是美金字串，前台要與台幣線共用縱軸就必須換算，
+    // 而匯率只存在於後端 Currency 表 － 這是本端點需要補 marketPriceTwd 的原因。
+    await t.test('每個 bucket 補上 marketPriceTwd（依 Currency 表的 USD 匯率）', async (t) => {
+      const runId = makeRunId('cs24');
+      const card = await createCard(runId);
+      await createSource(card.id, { provider: 'tcgplayer', externalId: '555' });
+      const rate = 32;
+      await prisma.currency.upsert({
+        where: { code: 'USD' },
+        update: { rateToTwd: rate },
+        create: { code: 'USD', rateToTwd: rate, source: 'test', fetchedAt: new Date() },
+      });
+      t.after(() => {
+        nock.cleanAll();
+        return cleanupByRunId(runId);
+      });
+
+      nock('https://infinite-api.tcgplayer.com')
+        .get('/price/history/555/detailed?range=quarter')
+        .reply(200, {
+          result: [
+            {
+              condition: 'Near Mint',
+              variant: 'Normal',
+              language: 'English',
+              buckets: [
+                { bucketStartDate: '2026-08-10', marketPrice: '10.50', quantitySold: '2' },
+                { bucketStartDate: '2026-08-07', marketPrice: '0', quantitySold: '0' },
+              ],
+            },
+          ],
+        });
+
+      const result = await getTcgplayerPriceHistory(card.id);
+      assert.equal(result.buckets[0].marketPriceTwd, Math.round(10.5 * rate));
+      // marketPrice 為 '0' 時 convertToTwd 會擋掉，不應變成 0 元的假價格
+      assert.equal(result.buckets[1].marketPriceTwd, null);
+      // 既有欄位不得被改寫
+      assert.equal(result.buckets[0].marketPrice, '10.50');
+      assert.equal(result.buckets[0].quantitySold, '2');
+    });
+
+    await t.test('查不到 USD 匯率時整批為 null 且不 throw', async (t) => {
+      const runId = makeRunId('cs25');
+      const card = await createCard(runId);
+      await createSource(card.id, { provider: 'tcgplayer', externalId: '556' });
+      const saved = await prisma.currency.findUnique({ where: { code: 'USD' } });
+      await prisma.currency.deleteMany({ where: { code: 'USD' } });
+      t.after(async () => {
+        nock.cleanAll();
+        if (saved) await prisma.currency.create({ data: saved });
+        await cleanupByRunId(runId);
+      });
+
+      nock('https://infinite-api.tcgplayer.com')
+        .get('/price/history/556/detailed?range=quarter')
+        .reply(200, {
+          result: [
+            {
+              condition: 'Near Mint',
+              variant: 'Normal',
+              language: 'English',
+              buckets: [{ bucketStartDate: '2026-08-10', marketPrice: '10.50', quantitySold: '2' }],
+            },
+          ],
+        });
+
+      const result = await getTcgplayerPriceHistory(card.id);
+      assert.equal(result.buckets[0].marketPriceTwd, null);
+      assert.equal(result.buckets[0].marketPrice, '10.50', '原始美金價仍須保留');
+    });
   });
 });
 
